@@ -1,8 +1,13 @@
 class_name Player
 extends CharacterBody2D
 ## 元素主角：只能左右移动（没有跳跃）。
-## 元素量（amount）随时间缓慢衰竭，移动时衰竭加快，归零即消散。
+## 元素量（amount）只在移动时衰竭（停留不消耗，给玩家思考时间），归零即消散。
 ## 火形态靠「燃料」补充元素量，水形态靠「水滴」补充（见 ElementPickup）。
+##
+## 外观：AnimatedSprite2D 动画帧（占位帧由 CharacterFrames 程序生成，可整体替换）。
+## - 火：微微浮空 + 缓慢起伏；移动时火苗向行进反方向拖曳（迎风变形）
+## - 水：贴地的圆形张力水滴；移动时横向拉伸，并在地面留下水渍
+## - 体内显示元素量百分比，制造紧迫感
 
 signal form_changed(form)
 signal depleted
@@ -17,15 +22,18 @@ enum Form { FIRE, WATER }
 
 @export_group("衰竭")
 @export var start_amount: float = 1.0
-## 静止时的衰竭速度（每秒）
-@export var idle_drain: float = 0.025
-## 移动时的额外衰竭速度（每秒）
+## 停留不消耗（0 = 静止完全不衰竭；想加全局压力可调大）
+@export var idle_drain: float = 0.0
+## 移动时的衰竭速度（每秒）
 @export var move_drain: float = 0.13
 
-const FORM_COLORS: Dictionary = {
-	Form.FIRE: Color(1.0, 0.45, 0.22),
-	Form.WATER: Color(0.30, 0.62, 1.0),
-}
+@export_group("外观")
+## 火焰悬空高度（像素）
+@export var fire_hover: float = 6.0
+## 水渍生成间隔（秒）
+@export var stain_interval: float = 0.12
+## 占位帧的显示缩放
+@export var sprite_scale: float = 0.6
 
 var form: Form = Form.FIRE
 ## 当前元素量（0~1）。归零即消散并发出 depleted 信号。
@@ -35,10 +43,14 @@ var input_enabled: bool = true
 
 var _facing: int = 1
 var _dead: bool = false
+var _time: float = 0.0
+var _trail_timer: float = 0.0
+var _last_percent: int = -1
 var _fx_tween: Tween
-var _body: Polygon2D
+var _sprite: AnimatedSprite2D
+var _percent_label: Label
 var _aura: CPUParticles2D
-var _face: Node2D
+var _float: Node2D
 var _fx: Node2D
 
 @onready var visual: Node2D = $Visual
@@ -52,15 +64,17 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_time += delta
 	if not is_on_floor():
 		velocity.y += gravity * delta
 
 	var direction := 0.0
 	if input_enabled and not _dead:
 		direction = Input.get_axis("move_left", "move_right")
+	var moving := direction != 0.0
 
 	var speed := move_speed * lerpf(min_speed_ratio, 1.0, amount)
-	if direction != 0.0:
+	if moving:
 		velocity.x = direction * speed
 		_facing = 1 if direction > 0.0 else -1
 	else:
@@ -71,15 +85,27 @@ func _physics_process(delta: float) -> void:
 	if _dead:
 		return
 
-	# 衰竭：移动时明显加快；归零即消散
-	var drain := idle_drain + (move_drain if direction != 0.0 else 0.0)
+	# 衰竭：只有移动才消耗；归零即消散
+	var drain := idle_drain + (move_drain if moving else 0.0)
 	amount = maxf(amount - drain * delta, 0.0)
 	_update_size()
 
 	if amount <= 0.0:
 		_die()
+		return
+
+	_update_animation(moving)
+	_update_hover(delta)
+	_update_percent()
+
+	# 水渍：水形态移动时在地面留下痕迹
+	if form == Form.WATER and moving and is_on_floor():
+		_trail_timer -= delta
+		if _trail_timer <= 0.0:
+			_trail_timer = stain_interval
+			_spawn_stain()
 	else:
-		_face.position.x = _facing * 3.0
+		_trail_timer = 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -115,28 +141,30 @@ func _die() -> void:
 	tween.tween_callback(func() -> void: depleted.emit())
 
 
-## 占位外观全部由代码生成；visual 节点随元素量缩放，_fx 节点负责弹跳反馈。
+## 视觉层级：visual(随元素量缩放) > _fx(拾取/切换的弹跳) > _float(形态悬停/起伏) > 精灵+百分比+光环
 func _build_visual() -> void:
 	_fx = Node2D.new()
 	visual.add_child(_fx)
 
-	_body = Polygon2D.new()
-	_body.polygon = PackedVector2Array([
-		Vector2(-14, -22), Vector2(14, -22),
-		Vector2(14, 22), Vector2(-14, 22),
-	])
-	_fx.add_child(_body)
+	_float = Node2D.new()
+	_fx.add_child(_float)
 
-	_face = Node2D.new()
-	_fx.add_child(_face)
-	for offset in [Vector2(-7, -10), Vector2(5, -10)]:
-		var eye := Polygon2D.new()
-		eye.polygon = PackedVector2Array([
-			Vector2(-2, -4), Vector2(2, -4), Vector2(2, 4), Vector2(-2, 4),
-		])
-		eye.color = Color(0.12, 0.13, 0.2)
-		eye.position = offset
-		_face.add_child(eye)
+	_sprite = AnimatedSprite2D.new()
+	_sprite.sprite_frames = CharacterFrames.build()
+	_sprite.scale = Vector2(sprite_scale, sprite_scale)
+	_sprite.play(CharacterFrames.FIRE_IDLE)
+	_float.add_child(_sprite)
+
+	_percent_label = Label.new()
+	_percent_label.position = Vector2(-24, -12)
+	_percent_label.custom_minimum_size = Vector2(48, 24)
+	_percent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_percent_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_percent_label.add_theme_font_size_override("font_size", 18)
+	_percent_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+	_percent_label.add_theme_color_override("font_outline_color", Color(0.08, 0.09, 0.14, 0.9))
+	_percent_label.add_theme_constant_override("outline_size", 6)
+	_float.add_child(_percent_label)
 
 	_aura = CPUParticles2D.new()
 	_aura.texture = VisualFx.soft_circle()
@@ -148,12 +176,11 @@ func _build_visual() -> void:
 	_aura.local_coords = true
 	_aura.scale_amount_min = 3.0
 	_aura.scale_amount_max = 6.0
-	_fx.add_child(_aura)
+	_float.add_child(_aura)
 
 
-## 按当前形态刷新外观；play_fx 控制是否播放切换时的挤压反馈。
+## 按当前形态刷新光环；play_fx 控制是否播放切换时的挤压反馈。
 func _apply_form(play_fx: bool) -> void:
-	_body.color = FORM_COLORS[form]
 	match form:
 		Form.FIRE:
 			_aura.direction = Vector2(0, -1)
@@ -181,6 +208,56 @@ func _update_size() -> void:
 	var s := lerpf(0.45, 1.0, amount)
 	visual.scale = Vector2(s, s)
 	_aura.amount = int(6.0 + 18.0 * amount)
+
+
+## 形态 + 是否移动 → 动画帧；向左移动用 flip_h 镜像。
+func _update_animation(moving: bool) -> void:
+	var anim: String
+	if form == Form.FIRE:
+		anim = CharacterFrames.FIRE_MOVE if moving else CharacterFrames.FIRE_IDLE
+	else:
+		anim = CharacterFrames.WATER_MOVE if moving else CharacterFrames.WATER_IDLE
+	if _sprite.animation != anim or not _sprite.is_playing():
+		_sprite.play(anim)
+	_sprite.flip_h = _facing < 0
+
+
+## 火：悬空 + 缓慢起伏；水：贴地 + 轻微张力呼吸。
+func _update_hover(delta: float) -> void:
+	var target := 0.0
+	if form == Form.FIRE:
+		target = -fire_hover + sin(_time * 2.5) * 3.0
+	else:
+		target = 8.0 + sin(_time * 1.8) * 1.2
+	_float.position.y = lerpf(_float.position.y, target, 12.0 * delta)
+
+
+## 体内百分比数字（只在整数变化时刷新）。
+func _update_percent() -> void:
+	var percent := int(round(amount * 100.0))
+	if percent != _last_percent:
+		_last_percent = percent
+		_percent_label.text = "%d%%" % percent
+
+
+## 水形态移动时留在地面的水渍，随时间淡出。
+func _spawn_stain() -> void:
+	var stain := Polygon2D.new()
+	var points := PackedVector2Array()
+	var radius := 7.0 + randf() * 4.0
+	for i in 10:
+		var angle := TAU * float(i) / 10.0
+		points.append(Vector2(cos(angle) * radius, sin(angle) * radius * 0.35))
+	stain.polygon = points
+	stain.position = Vector2(global_position.x + randf_range(-6.0, 6.0), global_position.y + 20.0)
+	stain.color = Color(0.3, 0.55, 0.95, 0.4)
+	stain.z_index = -1
+	get_tree().current_scene.add_child(stain)
+
+	var tween := stain.create_tween()
+	tween.tween_property(stain, "modulate:a", 0.0, 2.2).set_ease(Tween.EASE_IN)
+	tween.parallel().tween_property(stain, "scale", Vector2(0.7, 0.7), 2.2)
+	tween.tween_callback(stain.queue_free)
 
 
 func _new_fx_tween() -> Tween:

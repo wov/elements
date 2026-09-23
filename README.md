@@ -5,9 +5,9 @@
 ## 核心规则
 
 - **没有跳跃**，只能左右移动
-- **元素量**（0~1）随时间缓慢衰竭，**移动时衰竭明显加快**；归零即消散，关卡重来
+- **元素量**（0~1）**只在移动时衰竭，停留不消耗**——停下来思考是安全的；归零即消散，关卡重来
 - 火形态吸收 **燃料** 补充元素量；水形态吸收 **水滴** 补充；形态不符的资源无效
-- 元素量越低，**体形越小、移动越慢、光环越弱**（衰竭可视化）
+- 元素量越低，**体形越小、移动越慢、光环越弱**，体内直接显示 **百分比数字**（紧迫感）
 - 目标：走到关卡右端的终点门
 
 > 衰竭/补给数值都可以在 `player.gd` / `pickup.gd` 的导出变量（Inspector）里直接调。
@@ -33,12 +33,21 @@
 - `scenes/player.tscn` — 玩家（CharacterBody2D + 相机）
 - `scenes/pickup.tscn` — 补给（`kind`: FUEL 燃料 / WATER 水滴）
 - `scenes/exit_gate.tscn` — 终点门
-- `scripts/player.gd` — 移动、衰竭、形态切换、消散
+- `scripts/character_frames.gd` — 程序生成主角动画帧（SpriteFrames，四个动画）
+- `scripts/player.gd` — 移动、衰竭（移动才耗）、形态切换、百分比、水渍、消散
 - `scripts/pickup.gd` — 补给拾取（形态匹配才生效）
 - `scripts/exit_gate.gd`、`scripts/main.gd` — 通关与 HUD/重开逻辑
 - `scripts/visual_fx.gd` — 代码占位美术的共享工具
 
-> 占位美术全部由代码生成（多边形 + CPU 粒子），之后可直接替换为 Sprite2D 动画。
+## 主角表现
+
+主角使用 `AnimatedSprite2D` 动画帧，当前由 `character_frames.gd` 程序生成占位帧：
+
+- **火**：微微浮空并缓慢起伏；移动时火苗向行进反方向拖曳（迎风变形）
+- **水**：贴地的圆形张力水滴（表面轻微抖动）；移动时横向拉伸，并在地面留下逐渐淡出的 **水渍**
+- 体内实时显示元素量 **百分比**
+
+> 正式美术就绪后，给 `AnimatedSprite2D` 换一份编辑器制作的 `SpriteFrames`（动画名不变：`fire_idle / fire_move / water_idle / water_move`）即可，无需改代码。其余占位美术（场景、补给）仍由多边形 + CPU 粒子生成。
 > 中文 HUD 依赖系统的字体回退；如果显示为方块，需要给项目添加一个包含 CJK 字形的字体。
 
 ## 当前设定（可讨论）
