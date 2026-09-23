@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/exit_gate.gd" id="1_exit"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_gate"]
+size = Vector2(80, 110)
+
+[node name="ExitGate" type="Area2D"]
+script = ExtResource("1_exit")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_gate")
+
+[node name="Visual" type="Node2D" parent="."]
