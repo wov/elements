@@ -277,22 +277,22 @@ func _update_light() -> void:
 
 
 ## 径向渐变光照纹理（中心亮、边缘透明），静态缓存。
-static var _light_tex: GradientTexture2D
+## 径向光照纹理：中心亮、向边缘平滑衰减到全透明（逐像素生成，
+## 保证内切圆以外——包括正方形四角——alpha 恒为 0，不会露出方形光斑）。
+static var _light_tex: ImageTexture
 
 static func _light_texture() -> Texture2D:
 	if _light_tex == null:
-		var gradient := Gradient.new()
-		gradient.set_color(0, Color(1, 1, 1, 1))
-		gradient.add_point(0.45, Color(1, 1, 1, 0.7))
-		gradient.add_point(0.75, Color(1, 1, 1, 0.18))
-		gradient.set_color(1, Color(1, 1, 1, 0))
-		_light_tex = GradientTexture2D.new()
-		_light_tex.gradient = gradient
-		_light_tex.width = 256
-		_light_tex.height = 256
-		_light_tex.fill = GradientTexture2D.FILL_RADIAL
-		_light_tex.fill_from = Vector2(0.5, 0.5)
-		_light_tex.fill_to = Vector2(1.0, 0.5)
+		var size := 256
+		var image := Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+		for y in size:
+			for x in size:
+				var nx := (float(x) + 0.5) / float(size) * 2.0 - 1.0
+				var ny := (float(y) + 0.5) / float(size) * 2.0 - 1.0
+				var d := sqrt(nx * nx + ny * ny)
+				var falloff := clampf(1.0 - d, 0.0, 1.0)
+				image.set_pixel(x, y, Color(1, 1, 1, pow(falloff, 1.8)))
+		_light_tex = ImageTexture.create_from_image(image)
 	return _light_tex
 
 
