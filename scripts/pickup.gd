@@ -3,7 +3,7 @@ extends Area2D
 ## 场景补给与相克交互（全部用多边形 + 补间动画，无粒子）：
 ## 道具静止地放在地面上，不悬浮、不晃动。
 ## - 煤块 × 火：播放「吃煤」动画并补充元素量，煤块消失
-## - 煤块 × 水：水量被煤块吸走一部分（煤块不消失，有吸收间隔）
+## - 煤块 × 水：整颗水滴被吸进煤里（玩家死亡，游戏结束）
 ## - 水滴 × 水：靠近会被吸附飞来，融合后补充元素量
 ## - 水滴 × 火：火焰直接被熄灭（玩家死亡）
 
@@ -11,10 +11,6 @@ enum Kind { COAL, WATER }
 
 @export var kind: Kind = Kind.COAL
 @export var restore_amount: float = 0.4
-## 煤块每次从水形态身上吸走的水量
-@export var absorb_amount: float = 0.2
-## 煤块两次吸水之间的间隔（秒）
-@export var absorb_cooldown: float = 1.0
 ## 水滴被水形态吸附的起始距离（像素）
 @export var attract_radius: float = 90.0
 
@@ -23,7 +19,6 @@ const MERGE_DISTANCE := 20.0
 
 var _visual: Node2D
 var _consumed := false
-var _absorb_timer := 0.0
 var _attract_speed := 0.0
 
 
@@ -33,7 +28,6 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_absorb_timer = maxf(_absorb_timer - delta, 0.0)
 	if _consumed:
 		return
 	match kind:
@@ -99,14 +93,13 @@ func _fx_host() -> Node:
 	return get_parent()
 
 
-## 煤块：吸走正重叠的水形态玩家（带冷却）。
+## 煤块：碰到水形态玩家 → 整个被吸进去，游戏结束。
+## （物理帧轮询兜底：玩家以火形态贴着煤块切水时 body_entered 不会再触发）
 func _update_coal() -> void:
-	if _absorb_timer > 0.0:
-		return
 	for body in get_overlapping_bodies():
 		var player := body as Player
 		if player and player.form == Player.Form.WATER and not player.is_dead():
-			_drink(player)
+			_absorb(player)
 			break
 
 
@@ -139,6 +132,8 @@ func _on_body_entered(body: Node2D) -> void:
 		Kind.COAL:
 			if player.form == Player.Form.FIRE:
 				_eat(player)
+			elif player.form == Player.Form.WATER:
+				_absorb(player)
 		Kind.WATER:
 			if player.form == Player.Form.FIRE:
 				player.extinguish()
@@ -177,15 +172,15 @@ func _spawn_chunk(from: Vector2, player: Player, delay: float) -> void:
 	tween.tween_callback(chunk.queue_free)
 
 
-## 煤吸水：几颗小水珠从玩家身上被拽进煤块，煤块鼓一下。
-func _drink(player: Player) -> void:
-	_absorb_timer = absorb_cooldown
-	player.lose_amount(absorb_amount)
+## 煤吸水：整颗水滴被拽进煤块（玩家死亡）。煤块鼓一下，喝饱了。
+func _absorb(player: Player) -> void:
+	_consumed = true
+	player.absorb_into(global_position)
 	for i in 3:
 		_spawn_orb(player, 0.05 * float(i))
 	var tween := create_tween()
-	tween.tween_property(_visual, "scale", Vector2(1.2, 1.2), 0.1)
-	tween.tween_property(_visual, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_visual, "scale", Vector2(1.35, 1.35), 0.15)
+	tween.tween_property(_visual, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _spawn_orb(player: Player, delay: float) -> void:

@@ -25,6 +25,7 @@ func _ready() -> void:
 	player.form_changed.connect(_on_player_form_changed)
 	player.depleted.connect(_on_player_depleted)
 	player.extinguished.connect(_on_player_extinguished)
+	player.absorbed.connect(_on_player_absorbed)
 	exit_gate.reached.connect(_on_exit_reached)
 	_build_ui()
 
@@ -110,6 +111,14 @@ func _on_player_extinguished() -> void:
 	if _finished or _reloading:
 		return
 	_show_message("被水熄灭了……")
+	await get_tree().create_timer(1.2).timeout
+	_restart()
+
+
+func _on_player_absorbed() -> void:
+	if _finished or _reloading:
+		return
+	_show_message("被煤块吸走了……")
 	await get_tree().create_timer(1.2).timeout
 	_restart()
 

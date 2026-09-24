@@ -2,7 +2,8 @@ class_name Player
 extends CharacterBody2D
 ## 元素主角：只能左右移动（没有跳跃）。
 ## 元素量（amount）只在移动时衰竭（停留不消耗，给玩家思考时间），归零即消散。
-## 火形态吃「煤块」补充元素量，水形态吸收「水滴」补充；火碰到水滴会被熄灭（见 ElementPickup）。
+## 火形态吃「煤块」补充元素量，水形态吸收「水滴」补充；
+## 火碰到水滴会被熄灭，水碰到煤块会被整个吸进去（见 ElementPickup）。
 ##
 ## 外观：AnimatedSprite2D 动画帧（占位帧由 CharacterFrames 程序生成，可整体替换）。
 ## - 火：微微浮空 + 缓慢起伏；移动时火苗向行进反方向拖曳（迎风变形）
@@ -14,6 +15,7 @@ extends CharacterBody2D
 signal form_changed(form)
 signal depleted
 signal extinguished
+signal absorbed
 
 enum Form { FIRE, WATER }
 
@@ -73,11 +75,14 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_time += delta
+	if _dead:
+		# 死亡后的表现完全交给补间动画（缩小 / 被吸走 / 淡出）
+		return
 	if not is_on_floor():
 		velocity.y += gravity * delta
 
 	var direction := 0.0
-	if input_enabled and not _dead:
+	if input_enabled:
 		direction = Input.get_axis("move_left", "move_right")
 	var moving := direction != 0.0
 
@@ -89,9 +94,6 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, speed)
 
 	move_and_slide()
-
-	if _dead:
-		return
 
 	# 衰竭：只有移动才消耗；归零即消散
 	var drain := idle_drain + (move_drain if moving else 0.0)
@@ -153,28 +155,12 @@ func add_amount(value: float, strong := false) -> void:
 		tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-## 被煤块吸走水量：压扁一下并闪一下淡蓝。
-func lose_amount(value: float) -> void:
-	if _dead:
-		return
-	amount = maxf(amount - value, 0.0)
-	_update_size()
-	var tween := _new_fx_tween()
-	tween.set_parallel(true)
-	tween.tween_property(_fx, "scale:x", 0.82, 0.08)
-	tween.tween_property(_fx, "scale:y", 1.12, 0.08)
-	tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_flash(Color(0.75, 0.85, 1.3))
-	if amount <= 0.0:
-		_die()
-
-
 ## 火形态碰到水滴：熄灭。冒几缕蒸汽后广播 extinguished。
 func extinguish() -> void:
 	if _dead:
 		return
 	_dead = true
-	velocity.x = 0.0
+	velocity = Vector2.ZERO
 	_sprite.stop()
 	_sprite.modulate = Color(0.75, 0.85, 1.05)
 	_spawn_steam()
@@ -183,6 +169,20 @@ func extinguish() -> void:
 	var tween := create_tween()
 	tween.tween_property(visual, "scale", Vector2.ZERO, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_callback(func() -> void: extinguished.emit())
+
+
+## 水形态碰到煤块：整颗水滴被拽进煤里（缩小的同时移向煤块），然后广播 absorbed。
+func absorb_into(into: Vector2) -> void:
+	if _dead:
+		return
+	_dead = true
+	velocity = Vector2.ZERO
+	_sprite.stop()
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(self, "global_position", into, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(visual, "scale", Vector2.ZERO, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(func() -> void: absorbed.emit())
 
 
 func _die() -> void:
