@@ -1,6 +1,7 @@
 class_name ElementPickup
 extends Area2D
 ## 场景补给与相克交互（全部用多边形 + 补间动画，无粒子）：
+## 道具静止地放在地面上，不悬浮、不晃动。
 ## - 煤块 × 火：播放「吃煤」动画并补充元素量，煤块消失
 ## - 煤块 × 水：水量被煤块吸走一部分（煤块不消失，有吸收间隔）
 ## - 水滴 × 水：靠近会被吸附飞来，融合后补充元素量
@@ -24,13 +25,10 @@ var _visual: Node2D
 var _consumed := false
 var _absorb_timer := 0.0
 var _attract_speed := 0.0
-var _bob_tween: Tween
 
 
 func _ready() -> void:
 	_build_visual()
-	if kind == Kind.WATER:
-		_start_bob()
 	body_entered.connect(_on_body_entered)
 
 
@@ -91,12 +89,6 @@ static func _circle_points(radius: float) -> PackedVector2Array:
 		var angle := TAU * float(i) / 16.0
 		points.append(Vector2(cos(angle) * radius, sin(angle) * radius))
 	return points
-
-
-func _start_bob() -> void:
-	_bob_tween = create_tween().set_loops()
-	_bob_tween.tween_property(_visual, "position:y", -5.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_bob_tween.tween_property(_visual, "position:y", 5.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 ## 飞出的动画节点挂到当前场景（无主场景的测试环境下挂到父节点兜底）。
@@ -217,8 +209,6 @@ func _spawn_orb(player: Player, delay: float) -> void:
 ## 融合：水滴一头扎进玩家，泛起一圈涟漪。
 func _merge(player: Player) -> void:
 	_consumed = true
-	if _bob_tween and _bob_tween.is_valid():
-		_bob_tween.kill()
 	player.add_amount(restore_amount)
 	_spawn_ripple(global_position)
 	var tween := create_tween()
@@ -244,8 +234,6 @@ func _spawn_ripple(at: Vector2) -> void:
 ## 火碰到水滴：水滴化作一小团蒸汽升走。
 func _steam_pop() -> void:
 	_consumed = true
-	if _bob_tween and _bob_tween.is_valid():
-		_bob_tween.kill()
 	var steam := Polygon2D.new()
 	steam.polygon = _circle_points(6.0)
 	steam.color = Color(0.9, 0.94, 1.0, 0.6)
