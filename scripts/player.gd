@@ -8,6 +8,7 @@ extends CharacterBody2D
 ## - 火：微微浮空 + 缓慢起伏；移动时火苗向行进反方向拖曳（迎风变形）
 ## - 水：贴地的圆形张力水滴；移动时横向拉伸，并在地面留下水渍
 ## - 体内显示元素量百分比，制造紧迫感
+## 火形态自带 PointLight2D 光照，能照亮周围环境（配合场景里的 CanvasModulate 压暗）。
 ## 反馈动画全部用多边形 + 补间完成，没有粒子效果。
 
 signal form_changed(form)
@@ -32,6 +33,10 @@ enum Form { FIRE, WATER }
 @export_group("外观")
 ## 火焰悬空高度（像素）
 @export var fire_hover: float = 6.0
+## 火焰光照强度（PointLight2D energy）
+@export var fire_light_energy: float = 1.15
+## 火焰光照范围（256px 光照纹理 × 该缩放）
+@export var fire_light_scale: float = 1.7
 ## 水渍生成间隔（秒）
 @export var stain_interval: float = 0.12
 ## 占位帧的显示缩放
@@ -51,6 +56,7 @@ var _last_percent: int = -1
 var _fx_tween: Tween
 var _sprite: AnimatedSprite2D
 var _percent_label: Label
+var _light: PointLight2D
 var _float: Node2D
 var _fx: Node2D
 
@@ -98,6 +104,7 @@ func _physics_process(delta: float) -> void:
 
 	_update_animation(moving)
 	_update_hover(delta)
+	_update_light()
 	_update_percent()
 
 	# 水渍：水形态移动时在地面留下痕迹
@@ -171,6 +178,8 @@ func extinguish() -> void:
 	_sprite.stop()
 	_sprite.modulate = Color(0.75, 0.85, 1.05)
 	_spawn_steam()
+	var light_fade := create_tween()
+	light_fade.tween_property(_light, "energy", 0.0, 0.35)
 	var tween := create_tween()
 	tween.tween_property(visual, "scale", Vector2.ZERO, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_callback(func() -> void: extinguished.emit())
@@ -179,6 +188,8 @@ func extinguish() -> void:
 func _die() -> void:
 	_dead = true
 	velocity.x = 0.0
+	var light_fade := create_tween()
+	light_fade.tween_property(_light, "energy", 0.0, 0.35)
 	var tween := create_tween()
 	tween.tween_property(visual, "scale", Vector2.ZERO, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_callback(func() -> void: depleted.emit())
@@ -209,9 +220,17 @@ func _build_visual() -> void:
 	_percent_label.add_theme_constant_override("outline_size", 6)
 	_float.add_child(_percent_label)
 
+	_light = PointLight2D.new()
+	_light.texture = _light_texture()
+	_light.color = Color(1.0, 0.72, 0.42)
+	_light.energy = fire_light_energy
+	_light.texture_scale = fire_light_scale
+	_float.add_child(_light)
+
 
 ## play_fx 控制切换形态时是否播放挤压反馈。
 func _apply_form(play_fx: bool) -> void:
+	_light.enabled = form == Form.FIRE
 	if play_fx:
 		var tween := _new_fx_tween()
 		tween.set_parallel(true)
@@ -246,6 +265,35 @@ func _update_hover(delta: float) -> void:
 	else:
 		target = 8.0 + sin(_time * 1.8) * 1.2
 	_float.position.y = lerpf(_float.position.y, target, 12.0 * delta)
+
+
+## 火焰光照：忽明忽暗地闪烁；元素量越少，光越弱、照得越近。
+func _update_light() -> void:
+	if form != Form.FIRE:
+		return
+	var flicker := 1.0 + 0.08 * sin(_time * 9.0) + 0.05 * sin(_time * 23.0)
+	_light.energy = fire_light_energy * flicker * lerpf(0.35, 1.0, amount)
+	_light.texture_scale = fire_light_scale * lerpf(0.55, 1.0, amount) * (1.0 + 0.03 * sin(_time * 7.0))
+
+
+## 径向渐变光照纹理（中心亮、边缘透明），静态缓存。
+static var _light_tex: GradientTexture2D
+
+static func _light_texture() -> Texture2D:
+	if _light_tex == null:
+		var gradient := Gradient.new()
+		gradient.set_color(0, Color(1, 1, 1, 1))
+		gradient.add_point(0.45, Color(1, 1, 1, 0.7))
+		gradient.add_point(0.75, Color(1, 1, 1, 0.18))
+		gradient.set_color(1, Color(1, 1, 1, 0))
+		_light_tex = GradientTexture2D.new()
+		_light_tex.gradient = gradient
+		_light_tex.width = 256
+		_light_tex.height = 256
+		_light_tex.fill = GradientTexture2D.FILL_RADIAL
+		_light_tex.fill_from = Vector2(0.5, 0.5)
+		_light_tex.fill_to = Vector2(1.0, 0.5)
+	return _light_tex
 
 
 ## 体内百分比数字（只在整数变化时刷新）。
