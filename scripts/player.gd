@@ -2,15 +2,17 @@ class_name Player
 extends CharacterBody2D
 ## 元素主角：只能左右移动（没有跳跃）。
 ## 元素量（amount）只在移动时衰竭（停留不消耗，给玩家思考时间），归零即消散。
-## 火形态靠「燃料」补充元素量，水形态靠「水滴」补充（见 ElementPickup）。
+## 火形态吃「煤块」补充元素量，水形态吸收「水滴」补充；火碰到水滴会被熄灭（见 ElementPickup）。
 ##
 ## 外观：AnimatedSprite2D 动画帧（占位帧由 CharacterFrames 程序生成，可整体替换）。
 ## - 火：微微浮空 + 缓慢起伏；移动时火苗向行进反方向拖曳（迎风变形）
 ## - 水：贴地的圆形张力水滴；移动时横向拉伸，并在地面留下水渍
 ## - 体内显示元素量百分比，制造紧迫感
+## 反馈动画全部用多边形 + 补间完成，没有粒子效果。
 
 signal form_changed(form)
 signal depleted
+signal extinguished
 
 enum Form { FIRE, WATER }
 
@@ -49,7 +51,6 @@ var _last_percent: int = -1
 var _fx_tween: Tween
 var _sprite: AnimatedSprite2D
 var _percent_label: Label
-var _aura: CPUParticles2D
 var _float: Node2D
 var _fx: Node2D
 
@@ -57,6 +58,7 @@ var _fx: Node2D
 
 
 func _ready() -> void:
+	add_to_group("player")
 	amount = start_amount
 	_build_visual()
 	_apply_form(false)
@@ -122,26 +124,67 @@ func switch_form() -> void:
 	form_changed.emit(form)
 
 
-## 吸收对应资源时补充元素量。
-func add_amount(value: float) -> void:
+## 是否已经消散/熄灭（供补给判断）。
+func is_dead() -> bool:
+	return _dead
+
+
+## 吸收对应资源时补充元素量；strong = 吃煤块这类「大口进补」，反馈更猛。
+func add_amount(value: float, strong := false) -> void:
 	if _dead:
 		return
 	amount = clampf(amount + value, 0.0, 1.0)
 	var tween := _new_fx_tween()
-	tween.tween_property(_fx, "scale", Vector2(1.35, 1.35), 0.08)
-	tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if strong:
+		tween.set_parallel(true)
+		tween.tween_property(_fx, "scale:x", 1.55, 0.07)
+		tween.tween_property(_fx, "scale:y", 0.7, 0.07)
+		tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_flash(Color(2.0, 1.7, 1.1))
+	else:
+		tween.tween_property(_fx, "scale", Vector2(1.35, 1.35), 0.08)
+		tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## 被煤块吸走水量：压扁一下并闪一下淡蓝。
+func lose_amount(value: float) -> void:
+	if _dead:
+		return
+	amount = maxf(amount - value, 0.0)
+	_update_size()
+	var tween := _new_fx_tween()
+	tween.set_parallel(true)
+	tween.tween_property(_fx, "scale:x", 0.82, 0.08)
+	tween.tween_property(_fx, "scale:y", 1.12, 0.08)
+	tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_flash(Color(0.75, 0.85, 1.3))
+	if amount <= 0.0:
+		_die()
+
+
+## 火形态碰到水滴：熄灭。冒几缕蒸汽后广播 extinguished。
+func extinguish() -> void:
+	if _dead:
+		return
+	_dead = true
+	velocity.x = 0.0
+	_sprite.stop()
+	_sprite.modulate = Color(0.75, 0.85, 1.05)
+	_spawn_steam()
+	var tween := create_tween()
+	tween.tween_property(visual, "scale", Vector2.ZERO, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_callback(func() -> void: extinguished.emit())
 
 
 func _die() -> void:
 	_dead = true
-	_aura.emitting = false
 	velocity.x = 0.0
 	var tween := create_tween()
 	tween.tween_property(visual, "scale", Vector2.ZERO, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_callback(func() -> void: depleted.emit())
 
 
-## 视觉层级：visual(随元素量缩放) > _fx(拾取/切换的弹跳) > _float(形态悬停/起伏) > 精灵+百分比+光环
+## 视觉层级：visual(随元素量缩放) > _fx(拾取/受吸收的弹跳) > _float(形态悬停/起伏) > 精灵+百分比
 func _build_visual() -> void:
 	_fx = Node2D.new()
 	visual.add_child(_fx)
@@ -166,35 +209,9 @@ func _build_visual() -> void:
 	_percent_label.add_theme_constant_override("outline_size", 6)
 	_float.add_child(_percent_label)
 
-	_aura = CPUParticles2D.new()
-	_aura.texture = VisualFx.soft_circle()
-	_aura.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
-	_aura.emission_sphere_radius = 16.0
-	_aura.amount = 24
-	_aura.lifetime = 0.7
-	_aura.spread = 35.0
-	_aura.local_coords = true
-	_aura.scale_amount_min = 3.0
-	_aura.scale_amount_max = 6.0
-	_float.add_child(_aura)
 
-
-## 按当前形态刷新光环；play_fx 控制是否播放切换时的挤压反馈。
+## play_fx 控制切换形态时是否播放挤压反馈。
 func _apply_form(play_fx: bool) -> void:
-	match form:
-		Form.FIRE:
-			_aura.direction = Vector2(0, -1)
-			_aura.gravity = Vector2(0, -120)
-			_aura.initial_velocity_min = 25.0
-			_aura.initial_velocity_max = 60.0
-			_aura.color = Color(1.0, 0.68, 0.25, 0.75)
-		Form.WATER:
-			_aura.direction = Vector2(0, 1)
-			_aura.gravity = Vector2(0, 260)
-			_aura.initial_velocity_min = 15.0
-			_aura.initial_velocity_max = 40.0
-			_aura.color = Color(0.55, 0.85, 1.0, 0.7)
-
 	if play_fx:
 		var tween := _new_fx_tween()
 		tween.set_parallel(true)
@@ -203,11 +220,10 @@ func _apply_form(play_fx: bool) -> void:
 		tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-## 元素量越低：体形越小、光环粒子越少。
+## 元素量越低体形越小。
 func _update_size() -> void:
 	var s := lerpf(0.45, 1.0, amount)
 	visual.scale = Vector2(s, s)
-	_aura.amount = int(6.0 + 18.0 * amount)
 
 
 ## 形态 + 是否移动 → 动画帧；向左移动用 flip_h 镜像。
@@ -252,7 +268,7 @@ func _spawn_stain() -> void:
 	stain.position = Vector2(global_position.x + randf_range(-6.0, 6.0), global_position.y + 20.0)
 	stain.color = Color(0.3, 0.55, 0.95, 0.4)
 	stain.z_index = -1
-	get_tree().current_scene.add_child(stain)
+	_fx_host().add_child(stain)
 
 	var tween := stain.create_tween()
 	tween.tween_property(stain, "modulate:a", 0.0, 2.2).set_ease(Tween.EASE_IN)
@@ -265,3 +281,39 @@ func _new_fx_tween() -> Tween:
 		_fx_tween.kill()
 	_fx_tween = create_tween()
 	return _fx_tween
+
+
+## 水渍/蒸汽等临时节点挂到当前场景（无主场景的测试环境下挂到父节点兜底）。
+func _fx_host() -> Node:
+	var tree := get_tree()
+	if tree != null and tree.current_scene != null:
+		return tree.current_scene
+	return get_parent()
+
+
+## 精灵短暂过曝/变色再淡回白色，做受击与进补的闪光。
+func _flash(color: Color) -> void:
+	_sprite.modulate = color
+	var tween := create_tween()
+	tween.tween_property(_sprite, "modulate", Color.WHITE, 0.25)
+
+
+## 熄灭时的蒸汽：几团白色椭圆缓缓上升消散。
+func _spawn_steam() -> void:
+	for i in 4:
+		var wisp := Polygon2D.new()
+		var points := PackedVector2Array()
+		for j in 8:
+			var angle := TAU * float(j) / 8.0
+			points.append(Vector2(cos(angle) * (4.0 + i), sin(angle) * (7.0 + i * 2.0)))
+		wisp.polygon = points
+		wisp.color = Color(0.88, 0.92, 1.0, 0.55)
+		wisp.position = global_position + Vector2(randf_range(-12.0, 12.0), randf_range(-10.0, 6.0))
+		wisp.z_index = 5
+		_fx_host().add_child(wisp)
+		var tween := wisp.create_tween()
+		tween.tween_interval(0.06 * float(i))
+		tween.set_parallel(true)
+		tween.tween_property(wisp, "position:y", wisp.position.y - randf_range(26.0, 40.0), 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(wisp, "modulate:a", 0.0, 0.55)
+		tween.chain().tween_callback(wisp.queue_free)

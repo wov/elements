@@ -24,6 +24,7 @@ func _ready() -> void:
 
 	player.form_changed.connect(_on_player_form_changed)
 	player.depleted.connect(_on_player_depleted)
+	player.extinguished.connect(_on_player_extinguished)
 	exit_gate.reached.connect(_on_exit_reached)
 	_build_ui()
 
@@ -65,7 +66,7 @@ func _build_ui() -> void:
 	box.add_child(_amount_bar)
 
 	var hint := Label.new()
-	hint.text = "移动 A/D 或 ←/→    切换形态 Q    重置 R"
+	hint.text = "移动 A/D 或 ←/→    切换形态 Q    重置 R\n小心：火怕水滴 · 水怕煤块"
 	hint.add_theme_font_size_override("font_size", 14)
 	hint.add_theme_color_override("font_color", Color(0.72, 0.75, 0.82))
 	box.add_child(hint)
@@ -88,11 +89,11 @@ func _on_player_form_changed(_form: int) -> void:
 
 func _refresh_form_label() -> void:
 	if player.form == Player.Form.FIRE:
-		_form_label.text = "当前形态：火（找燃料）"
+		_form_label.text = "当前形态：火（吃煤块）"
 		_form_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.3))
 		_fill_style.bg_color = Color(1.0, 0.45, 0.22)
 	else:
-		_form_label.text = "当前形态：水（找水滴）"
+		_form_label.text = "当前形态：水（吸水滴）"
 		_form_label.add_theme_color_override("font_color", Color(0.45, 0.75, 1.0))
 		_fill_style.bg_color = Color(0.30, 0.62, 1.0)
 
@@ -102,6 +103,14 @@ func _on_player_depleted() -> void:
 		return
 	_show_message("元素耗尽……")
 	await get_tree().create_timer(1.0).timeout
+	_restart()
+
+
+func _on_player_extinguished() -> void:
+	if _finished or _reloading:
+		return
+	_show_message("被水熄灭了……")
+	await get_tree().create_timer(1.2).timeout
 	_restart()
 
 
