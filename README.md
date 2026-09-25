@@ -36,6 +36,7 @@
 - `scenes/pickup.tscn` — 补给（`kind`: COAL 煤块 / WATER 水滴）
 - `scenes/exit_gate.tscn` — 终点门
 - `scripts/character_frames.gd` — 程序生成主角动画帧（SpriteFrames，四个动画）
+- `scripts/backdrop.gd` — 程序生成三层视差布景（远景山影 / 中景岩柱 / 前景草叶藤蔓）
 - `scripts/player.gd` — 移动、衰竭（移动才耗）、形态切换、百分比、水渍、熄灭、消散
 - `scripts/pickup.gd` — 补给与相克交互（吃煤 / 吸附 / 煤吸水 / 熄火）
 - `scripts/exit_gate.gd`、`scripts/main.gd` — 通关与 HUD/重开逻辑
@@ -50,8 +51,20 @@
 - **火焰光照**：火形态自带 `PointLight2D`，能照亮周围环境；光会闪烁，元素量越少光越弱、照得越近（场景用 `CanvasModulate` 压暗来突出光照）
 - **交互动画**（多边形 + 补间，无粒子效果）：吃煤（碎块飞入 + 火苗一鼓）、水滴吸附融合（涟漪）、煤块吸水（整颗水滴被拽进煤里）、火焰熄灭（蒸汽升腾）
 
-> 正式美术就绪后，给 `AnimatedSprite2D` 换一份编辑器制作的 `SpriteFrames`（动画名不变：`fire_idle / fire_move / water_idle / water_move`）即可，无需改代码。其余占位美术（场景、补给）由多边形 + 补间动画生成。
+> 正式美术就绪后，给 `AnimatedSprite2D` 换一份编辑器制作的 `SpriteFrames`（动画名不变：`fire_idle / fire_move / water_idle / water_move`）即可，无需改代码。其余占位美术（场景、补给、视差背景）由多边形 + 补间动画生成。
 > 中文 HUD 依赖系统的字体回退；如果显示为方块，需要给项目添加一个包含 CJK 字形的字体。
+
+## 三层视差背景
+
+`Backdrop` 程序生成、`Parallax2D` 驱动，随相机滚动产生纵深（滚动速度可在 `main.gd` 的 `_build_parallax` 调）：
+
+| 层 | 滚动 | 内容 | 顺序 |
+| --- | --- | --- | --- |
+| 远景 | 0.12 | 渐变夜空、两重远山、发光晶簇、微光尘点 | 最底（z −30） |
+| 中景 | 0.45 | 岩柱、残破石拱、钟乳石 | 场景后面（z −20） |
+| 前景 | 1.3 | 地面草叶、垂藤（半透明，不挡玩法） | 玩家前面（z +10） |
+
+所有布景都在默认画布里：会被暮色 `CanvasModulate` 压暗，也会被火焰的 `PointLight2D` 照亮。
 
 ## 当前设定（可讨论）
 

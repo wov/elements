@@ -27,7 +27,26 @@ func _ready() -> void:
 	player.extinguished.connect(_on_player_extinguished)
 	player.absorbed.connect(_on_player_absorbed)
 	exit_gate.reached.connect(_on_exit_reached)
+	_build_parallax()
 	_build_ui()
+
+
+## 三层视差布景：远景最慢、前景最快且画在玩家前面（Backdrop 程序生成占位美术）。
+func _build_parallax() -> void:
+	var far := _make_parallax_layer(Vector2(0.12, 0.12), -30)
+	Backdrop.build_far(far)
+	var mid := _make_parallax_layer(Vector2(0.45, 0.45), -20)
+	Backdrop.build_mid(mid)
+	var fore := _make_parallax_layer(Vector2(1.3, 1.0), 10)
+	Backdrop.build_fore(fore)
+
+
+func _make_parallax_layer(scroll: Vector2, z: int) -> Parallax2D:
+	var layer := Parallax2D.new()
+	layer.scroll_scale = scroll
+	layer.z_index = z
+	add_child(layer)
+	return layer
 
 
 func _process(_delta: float) -> void:
