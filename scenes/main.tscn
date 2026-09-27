@@ -91,10 +91,10 @@ sag = 0.0
 script = ExtResource("5_rope")
 
 [node name="RopeHigh" type="Node2D" parent="Level"]
-position = Vector2(1900, 622)
-point_a = Vector2(-140, 0)
-point_b = Vector2(140, 0)
-sag = 14.0
+position = Vector2(1740, 622)
+point_a = Vector2(-20, 0)
+point_b = Vector2(300, -430)
+sag = 0.0
 script = ExtResource("5_rope")
 
 [node name="ExitGate" parent="Level" instance=ExtResource("4_exit")]

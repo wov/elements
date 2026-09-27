@@ -49,8 +49,14 @@ var form: Form = Form.FIRE
 var amount: float = 1.0
 ## 通关等场合可冻结玩家输入。
 var input_enabled: bool = true
-## 衰竭暂停计数：外部演出（如绳子燃烧「期间保持元素状态不变」）持有 >0 时完全不消耗。
+## 衰竭暂停计数：外部演出（如沿绳滑行「期间保持元素状态不变」）持有 >0 时完全不消耗。
 var drain_holds: int = 0
+## 正在滑行的引火绳（非 null 时位置由绳驱动，自身移动与重力暂停）。
+var rope: Rope = null
+## 外力惯性（绳端弹出等赋予），独立于操控速度，按 external_friction 线性衰减。
+var external_impulse := Vector2.ZERO
+## 外力惯性的每秒衰减量（像素/秒²）。
+@export var external_friction: float = 500.0
 
 var _facing: int = 1
 var _dead: bool = false
@@ -80,6 +86,14 @@ func _physics_process(delta: float) -> void:
 	if _dead:
 		# 死亡后的表现完全交给补间动画（缩小 / 被吸走 / 淡出）
 		return
+	if rope != null:
+		# 沿绳滑行：位置由绳驱动，锁定中不衰竭；变水由绳检测并立即脱绳
+		velocity = Vector2.ZERO
+		_update_animation(false)
+		_update_hover(delta)
+		_update_light()
+		_update_percent()
+		return
 	if not is_on_floor():
 		velocity.y += gravity * delta
 
@@ -96,6 +110,10 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, speed)
 
 	move_and_slide()
+	# 外力惯性（绳端弹出等）：独立于操控速度，「松键急停」不影响它，按摩擦线性衰减
+	if external_impulse.length_squared() > 1.0:
+		move_and_collide(external_impulse * delta)
+		external_impulse = external_impulse.move_toward(Vector2.ZERO, external_friction * delta)
 
 	# 衰竭：只有移动才消耗（绳子燃烧等演出期间整体暂停）；归零即消散
 	var drain := 0.0
