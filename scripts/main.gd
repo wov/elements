@@ -68,6 +68,7 @@ func _build_ui() -> void:
 	layer.add_child(box)
 
 	_form_label = Label.new()
+	UiFont.apply(_form_label)
 	_form_label.add_theme_font_size_override("font_size", 22)
 	box.add_child(_form_label)
 
@@ -86,12 +87,14 @@ func _build_ui() -> void:
 	box.add_child(_amount_bar)
 
 	var hint := Label.new()
+	UiFont.apply(hint)
 	hint.text = "移动 A/D 或 ←/→    切换形态 Q    重置 R\n小心：火怕水滴 · 水怕煤块"
 	hint.add_theme_font_size_override("font_size", 14)
 	hint.add_theme_color_override("font_color", Color(0.72, 0.75, 0.82))
 	box.add_child(hint)
 
 	_message_label = Label.new()
+	UiFont.apply(_message_label)
 	_message_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

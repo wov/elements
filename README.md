@@ -37,6 +37,8 @@
 - `scenes/exit_gate.tscn` — 终点门
 - `scripts/character_frames.gd` — 主角动画帧（SpriteFrames）：有正式美术的动画读图，其余程序生成占位
 - `assets/water/idle/1.png ~ 8.png` — 水形态待机正式美术（300×280，构建时自动缩放进 64px 帧格）
+- `assets/fonts/` — 中文 HUD 字体：缝合像素字体 12px（简体中文，OFL 开源）
+- `scripts/ui_font.gd` — HUD 中文字体加载（打包字体优先，缺文件回退系统 CJK 字体）
 - `scripts/backdrop.gd` — 程序生成三层视差布景（远景山影 / 中景岩柱 / 前景草叶藤蔓）
 - `scripts/player.gd` — 移动、衰竭（移动才耗）、形态切换、百分比、水渍、熄灭、消散
 - `scripts/pickup.gd` — 补给与相克交互（吃煤 / 吸附 / 煤吸水 / 熄火）
@@ -53,7 +55,7 @@
 - **交互动画**（多边形 + 补间，无粒子效果）：吃煤（碎块飞入 + 火苗一鼓）、水滴吸附融合（涟漪）、煤块吸水（整颗水滴被拽进煤里）、火焰熄灭（蒸汽升腾）
 
 > 补充正式美术最简单的方式：在 `assets/<形态>/<动画>/` 下放 `1.png、2.png…`，再在 `character_frames.gd` 里把对应动画指到该目录（缺图会自动回退占位帧并告警）。图片构建时会缩放进 64px 帧格，贴地高度、体形缩放等标定无需改动。其余占位美术（火焰、水移动、补给、视差背景）由多边形 + 补间动画生成。
-> 中文 HUD 依赖系统的字体回退；如果显示为方块，需要给项目添加一个包含 CJK 字形的字体。
+> 中文 HUD 使用打包的 [缝合像素字体](https://github.com/TakWolf/fusion-pixel-font)（12px 比例版·简体中文，OFL 许可证随仓库附带），任何平台和导出版显示一致；字体文件缺失时自动回退系统 CJK 字体（PingFang / 微软雅黑 / Noto Sans CJK）。
 
 ## 三层视差背景
 

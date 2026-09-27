@@ -210,6 +210,7 @@ func _build_visual() -> void:
 	_float.add_child(_sprite)
 
 	_percent_label = Label.new()
+	UiFont.apply(_percent_label)
 	_percent_label.position = Vector2(-24, -12)
 	_percent_label.custom_minimum_size = Vector2(48, 24)
 	_percent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
