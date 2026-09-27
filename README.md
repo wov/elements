@@ -35,7 +35,8 @@
 - `scenes/player.tscn` — 玩家（CharacterBody2D + 相机）
 - `scenes/pickup.tscn` — 补给（`kind`: COAL 煤块 / WATER 水滴）
 - `scenes/exit_gate.tscn` — 终点门
-- `scripts/character_frames.gd` — 程序生成主角动画帧（SpriteFrames，四个动画）
+- `scripts/character_frames.gd` — 主角动画帧（SpriteFrames）：有正式美术的动画读图，其余程序生成占位
+- `assets/water/idle/1.png ~ 8.png` — 水形态待机正式美术（300×280，构建时自动缩放进 64px 帧格）
 - `scripts/backdrop.gd` — 程序生成三层视差布景（远景山影 / 中景岩柱 / 前景草叶藤蔓）
 - `scripts/player.gd` — 移动、衰竭（移动才耗）、形态切换、百分比、水渍、熄灭、消散
 - `scripts/pickup.gd` — 补给与相克交互（吃煤 / 吸附 / 煤吸水 / 熄火）
@@ -46,12 +47,12 @@
 主角使用 `AnimatedSprite2D` 动画帧，当前由 `character_frames.gd` 程序生成占位帧：
 
 - **火**：微微浮空并缓慢起伏；移动时火苗向行进反方向拖曳（迎风变形）
-- **水**：贴地的圆形张力水滴（表面轻微抖动）；移动时横向拉伸，并在地面留下逐渐淡出的 **水渍**
+- **水**：待机为**正式美术**（8 帧呼吸循环，见 `assets/water/idle/`）；移动仍是占位帧（横向拉伸），并在地面留下逐渐淡出的 **水渍**
 - 体内实时显示元素量 **百分比**
 - **火焰光照**：火形态自带 `PointLight2D`，能照亮周围环境；光会闪烁，元素量越少光越弱、照得越近（场景用 `CanvasModulate` 压暗来突出光照）
 - **交互动画**（多边形 + 补间，无粒子效果）：吃煤（碎块飞入 + 火苗一鼓）、水滴吸附融合（涟漪）、煤块吸水（整颗水滴被拽进煤里）、火焰熄灭（蒸汽升腾）
 
-> 正式美术就绪后，给 `AnimatedSprite2D` 换一份编辑器制作的 `SpriteFrames`（动画名不变：`fire_idle / fire_move / water_idle / water_move`）即可，无需改代码。其余占位美术（场景、补给、视差背景）由多边形 + 补间动画生成。
+> 补充正式美术最简单的方式：在 `assets/<形态>/<动画>/` 下放 `1.png、2.png…`，再在 `character_frames.gd` 里把对应动画指到该目录（缺图会自动回退占位帧并告警）。图片构建时会缩放进 64px 帧格，贴地高度、体形缩放等标定无需改动。其余占位美术（火焰、水移动、补给、视差背景）由多边形 + 补间动画生成。
 > 中文 HUD 依赖系统的字体回退；如果显示为方块，需要给项目添加一个包含 CJK 字形的字体。
 
 ## 三层视差背景

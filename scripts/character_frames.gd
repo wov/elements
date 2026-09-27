@@ -1,11 +1,12 @@
 class_name CharacterFrames
 extends RefCounted
-## 生成主角的占位动画帧（SpriteFrames）。
-## 正式美术就绪后，直接给 AnimatedSprite2D 换一份编辑器制作的 SpriteFrames 即可。
+## 生成主角的动画帧（SpriteFrames）。
+## 没有正式美术的动画用程序生成的占位帧；有正式美术的用 _use_art_frames 替换。
 ##
 ## 动画一览（均按「向右移动」绘制，向左由 flip_h 镜像）：
-## - fire_idle / fire_move：火焰；移动时火苗向行进反方向拖曳（迎风变形）并略微收窄
-## - water_idle / water_move：有张力的圆形水滴；静止时轻微张力呼吸，移动时横向拉伸
+## - fire_idle / fire_move：火焰（占位）；移动时火苗向行进反方向拖曳（迎风变形）并略微收窄
+## - water_idle：水滴待机 —— 正式美术 8 帧（assets/water/idle/）
+## - water_move：有张力的圆形水滴（占位）；移动时横向拉伸
 
 const FRAME_SIZE := 64
 
@@ -13,6 +14,11 @@ const FIRE_IDLE := "fire_idle"
 const FIRE_MOVE := "fire_move"
 const WATER_IDLE := "water_idle"
 const WATER_MOVE := "water_move"
+
+## 水待机正式美术：assets/water/idle/1.png ~ 8.png（300×280，透明底）
+const WATER_IDLE_DIR := "res://assets/water/idle/"
+const WATER_IDLE_COUNT := 8
+const WATER_IDLE_FPS := 8.0
 
 
 static func build() -> SpriteFrames:
@@ -23,7 +29,26 @@ static func build() -> SpriteFrames:
 	_add_anim(frames, FIRE_MOVE, 6, 14.0)
 	_add_anim(frames, WATER_IDLE, 4, 6.0)
 	_add_anim(frames, WATER_MOVE, 4, 10.0)
+	_use_art_frames(frames, WATER_IDLE, WATER_IDLE_DIR, WATER_IDLE_COUNT, WATER_IDLE_FPS)
 	return frames
+
+
+## 用正式美术帧替换占位动画：图片构建时缩放进 64px 帧格，沿用既有标定
+## （贴地高度、sprite_scale、百分比位置都不用动）。任一帧缺失就保留占位帧并告警，
+## 方便美术资源按目录逐步补齐。
+static func _use_art_frames(frames: SpriteFrames, anim: String, dir_path: String, count: int, fps: float) -> void:
+	for i in count:
+		if not ResourceLoader.exists(dir_path + str(i + 1) + ".png"):
+			push_warning("正式美术帧缺失：" + dir_path + str(i + 1) + ".png，沿用占位帧")
+			return
+	frames.remove_animation(anim)
+	frames.add_animation(anim)
+	frames.set_animation_speed(anim, fps)
+	frames.set_animation_loop(anim, true)
+	for i in count:
+		var image := (load(dir_path + str(i + 1) + ".png") as Texture2D).get_image()
+		image.resize(FRAME_SIZE, FRAME_SIZE, Image.INTERPOLATE_LANCZOS)
+		frames.add_frame(anim, ImageTexture.create_from_image(image))
 
 
 static func _add_anim(frames: SpriteFrames, anim: String, count: int, fps: float) -> void:
