@@ -49,6 +49,8 @@ var form: Form = Form.FIRE
 var amount: float = 1.0
 ## 通关等场合可冻结玩家输入。
 var input_enabled: bool = true
+## 衰竭暂停计数：外部演出（如绳子燃烧「期间保持元素状态不变」）持有 >0 时完全不消耗。
+var drain_holds: int = 0
 
 var _facing: int = 1
 var _dead: bool = false
@@ -95,8 +97,10 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	# 衰竭：只有移动才消耗；归零即消散
-	var drain := idle_drain + (move_drain if moving else 0.0)
+	# 衰竭：只有移动才消耗（绳子燃烧等演出期间整体暂停）；归零即消散
+	var drain := 0.0
+	if drain_holds <= 0:
+		drain = idle_drain + (move_drain if moving else 0.0)
 	amount = maxf(amount - drain * delta, 0.0)
 	_update_size()
 
@@ -277,24 +281,9 @@ func _update_light() -> void:
 	_light.texture_scale = fire_light_scale * lerpf(0.55, 1.0, amount) * (1.0 + 0.03 * sin(_time * 7.0))
 
 
-## 径向渐变光照纹理（中心亮、边缘透明），静态缓存。
-## 径向光照纹理：中心亮、向边缘平滑衰减到全透明（逐像素生成，
-## 保证内切圆以外——包括正方形四角——alpha 恒为 0，不会露出方形光斑）。
-static var _light_tex: ImageTexture
-
+## 径向渐变光照纹理（中心亮、边缘透明），静态缓存（见 Glow）。
 static func _light_texture() -> Texture2D:
-	if _light_tex == null:
-		var size := 256
-		var image := Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
-		for y in size:
-			for x in size:
-				var nx := (float(x) + 0.5) / float(size) * 2.0 - 1.0
-				var ny := (float(y) + 0.5) / float(size) * 2.0 - 1.0
-				var d := sqrt(nx * nx + ny * ny)
-				var falloff := clampf(1.0 - d, 0.0, 1.0)
-				image.set_pixel(x, y, Color(1, 1, 1, pow(falloff, 1.8)))
-		_light_tex = ImageTexture.create_from_image(image)
-	return _light_tex
+	return Glow.radial(256, 1.8)
 
 
 ## 体内百分比数字（只在整数变化时刷新）。

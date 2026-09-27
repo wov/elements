@@ -88,7 +88,7 @@ func _build_ui() -> void:
 
 	var hint := Label.new()
 	UiFont.apply(hint)
-	hint.text = "移动 A/D 或 ←/→    切换形态 Q    重置 R\n小心：火怕水滴 · 水怕煤块"
+	hint.text = "移动 A/D 或 ←/→    切换形态 Q    重置 R\n小心：火怕水滴 · 水怕煤块 · 火能点燃绳子"
 	hint.add_theme_font_size_override("font_size", 14)
 	hint.add_theme_color_override("font_color", Color(0.72, 0.75, 0.82))
 	box.add_child(hint)

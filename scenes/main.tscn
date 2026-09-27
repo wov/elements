@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
 [ext_resource type="PackedScene" path="res://scenes/pickup.tscn" id="3_pickup"]
 [ext_resource type="PackedScene" path="res://scenes/exit_gate.tscn" id="4_exit"]
+[ext_resource type="Script" path="res://scripts/rope.gd" id="5_rope"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
 size = Vector2(2600, 60)
@@ -77,6 +78,24 @@ kind = 1
 
 [node name="Coal4" parent="Level" instance=ExtResource("3_pickup")]
 position = Vector2(2200, 646)
+
+[node name="RopeLow" type="Node2D" parent="Level"]
+position = Vector2(900, 620)
+script = ExtResource("5_rope")
+
+[node name="RopeHang" type="Node2D" parent="Level"]
+position = Vector2(1520, 40)
+point_a = Vector2(0, 0)
+point_b = Vector2(0, 580)
+sag = 0.0
+script = ExtResource("5_rope")
+
+[node name="RopeHigh" type="Node2D" parent="Level"]
+position = Vector2(1900, 622)
+point_a = Vector2(-140, 0)
+point_b = Vector2(140, 0)
+sag = 14.0
+script = ExtResource("5_rope")
 
 [node name="ExitGate" parent="Level" instance=ExtResource("4_exit")]
 position = Vector2(2380, 614)
