@@ -1,0 +1,86 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
+[ext_resource type="PackedScene" path="res://scenes/exit_gate.tscn" id="4_exit"]
+[ext_resource type="Script" path="res://scripts/rope.gd" id="5_rope"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cliffA"]
+size = Vector2(700, 200)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cliffB"]
+size = Vector2(560, 400)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
+size = Vector2(80, 760)
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+camera_bounds = Rect2(0, 0, 1920, 720)
+fall_limit_y = 900.0
+hint_text = "移动 A/D 或 ←/→    切换形态 Q    重置 R
+火：走出悬崖落到斜绳上，可滑到对岸高处
+水：会穿过绳子坠下深渊，出界即失败"
+
+[node name="Ambient" type="CanvasModulate" parent="."]
+color = Color(0.34, 0.37, 0.5, 1)
+
+[node name="Background" type="Polygon2D" parent="."]
+z_index = -50
+polygon = PackedVector2Array(0, 0, 1920, 0, 1920, 720, 0, 720)
+color = Color(0.3, 0.34, 0.48, 1)
+
+[node name="Level" type="Node2D" parent="."]
+
+[node name="CliffA" type="StaticBody2D" parent="Level"]
+position = Vector2(290, 660)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Level/CliffA"]
+shape = SubResource("RectangleShape2D_cliffA")
+
+[node name="Polygon2D" type="Polygon2D" parent="Level/CliffA"]
+polygon = PackedVector2Array(-350, -100, 350, -100, 350, 80, 120, 100, -220, 100, -350, 60)
+color = Color(0.16, 0.19, 0.27, 1)
+
+[node name="CliffB" type="StaticBody2D" parent="Level"]
+position = Vector2(1440, 560)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Level/CliffB"]
+shape = SubResource("RectangleShape2D_cliffB")
+
+[node name="Polygon2D" type="Polygon2D" parent="Level/CliffB"]
+polygon = PackedVector2Array(-280, -200, 280, -200, 280, 120, 0, 150, -280, 60)
+color = Color(0.16, 0.19, 0.27, 1)
+
+[node name="WallLeft" type="StaticBody2D" parent="Level"]
+position = Vector2(-20, 360)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Level/WallLeft"]
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="Polygon2D" type="Polygon2D" parent="Level/WallLeft"]
+polygon = PackedVector2Array(-40, -380, 40, -380, 40, 380, -40, 380)
+color = Color(0.13, 0.15, 0.22, 1)
+
+[node name="WallRight" type="StaticBody2D" parent="Level"]
+position = Vector2(1760, 360)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Level/WallRight"]
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="Polygon2D" type="Polygon2D" parent="Level/WallRight"]
+polygon = PackedVector2Array(-40, -380, 40, -380, 40, 380, -40, 380)
+color = Color(0.13, 0.15, 0.22, 1)
+
+[node name="RopeCliff" type="Node2D" parent="Level"]
+script = ExtResource("5_rope")
+position = Vector2(660, 660)
+point_a = Vector2(0, 0)
+point_b = Vector2(490, -330)
+sag = 0.0
+
+[node name="ExitGate" parent="Level" instance=ExtResource("4_exit")]
+position = Vector2(1600, 314)
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+position = Vector2(280, 530)

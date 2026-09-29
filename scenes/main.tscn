@@ -80,22 +80,22 @@ kind = 1
 position = Vector2(2200, 646)
 
 [node name="RopeLow" type="Node2D" parent="Level"]
-position = Vector2(900, 620)
 script = ExtResource("5_rope")
+position = Vector2(900, 620)
 
 [node name="RopeHang" type="Node2D" parent="Level"]
+script = ExtResource("5_rope")
 position = Vector2(1520, 40)
 point_a = Vector2(0, 0)
 point_b = Vector2(0, 580)
 sag = 0.0
-script = ExtResource("5_rope")
 
 [node name="RopeHigh" type="Node2D" parent="Level"]
+script = ExtResource("5_rope")
 position = Vector2(1740, 622)
 point_a = Vector2(-20, 0)
 point_b = Vector2(300, -430)
 sag = 0.0
-script = ExtResource("5_rope")
 
 [node name="ExitGate" parent="Level" instance=ExtResource("4_exit")]
 position = Vector2(2380, 614)

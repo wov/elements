@@ -2,7 +2,11 @@ extends Node2D
 ## 主场景：搭建关卡与 HUD，处理消散重开、通关提示。
 
 ## 相机活动范围（关卡世界坐标）。
-const CAMERA_BOUNDS := Rect2(0, 0, 2560, 720)
+@export var camera_bounds := Rect2(0, 0, 2560, 720)
+## 玩家掉到这条线之下（坠崖出界）即判失败重开；走廊关有整片地面，默认值永远够不到。
+@export var fall_limit_y := 1200.0
+## 左上角操作提示（按关卡改写）。
+@export var hint_text := "移动 A/D 或 ←/→    切换形态 Q    重置 R\n小心：火怕水滴 · 水怕煤块 · 火能钻进绳子滑行"
 
 @onready var player: Player = $Player
 @onready var exit_gate: ExitGate = $Level/ExitGate
@@ -17,15 +21,16 @@ var _reloading: bool = false
 
 func _ready() -> void:
 	var camera: Camera2D = $Player/Camera2D
-	camera.limit_left = int(CAMERA_BOUNDS.position.x)
-	camera.limit_top = int(CAMERA_BOUNDS.position.y)
-	camera.limit_right = int(CAMERA_BOUNDS.end.x)
-	camera.limit_bottom = int(CAMERA_BOUNDS.end.y)
+	camera.limit_left = int(camera_bounds.position.x)
+	camera.limit_top = int(camera_bounds.position.y)
+	camera.limit_right = int(camera_bounds.end.x)
+	camera.limit_bottom = int(camera_bounds.end.y)
 
 	player.form_changed.connect(_on_player_form_changed)
 	player.depleted.connect(_on_player_depleted)
 	player.extinguished.connect(_on_player_extinguished)
 	player.absorbed.connect(_on_player_absorbed)
+	player.fell.connect(_on_player_fell)
 	exit_gate.reached.connect(_on_exit_reached)
 	_build_parallax()
 	_build_ui()
@@ -51,6 +56,10 @@ func _make_parallax_layer(scroll: Vector2, z: int) -> Parallax2D:
 
 func _process(_delta: float) -> void:
 	_amount_bar.value = player.amount
+	# 坠崖出界：掉过失败线即判失败（水穿绳坠落、火没接住绳都会落到这里）
+	if not _finished and not _reloading and not player.is_dead() \
+			and player.global_position.y > fall_limit_y:
+		player.fall_die()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -88,7 +97,7 @@ func _build_ui() -> void:
 
 	var hint := Label.new()
 	UiFont.apply(hint)
-	hint.text = "移动 A/D 或 ←/→    切换形态 Q    重置 R\n小心：火怕水滴 · 水怕煤块 · 火能钻进绳子滑行"
+	hint.text = hint_text
 	hint.add_theme_font_size_override("font_size", 14)
 	hint.add_theme_color_override("font_color", Color(0.72, 0.75, 0.82))
 	box.add_child(hint)
@@ -142,6 +151,14 @@ func _on_player_absorbed() -> void:
 		return
 	_show_message("被煤块吸走了……")
 	await get_tree().create_timer(1.2).timeout
+	_restart()
+
+
+func _on_player_fell() -> void:
+	if _finished or _reloading:
+		return
+	_show_message("掉下深渊……")
+	await get_tree().create_timer(1.0).timeout
 	_restart()
 
 

@@ -16,6 +16,7 @@ signal form_changed(form)
 signal depleted
 signal extinguished
 signal absorbed
+signal fell
 
 enum Form { FIRE, WATER }
 
@@ -205,6 +206,17 @@ func absorb_into(into: Vector2) -> void:
 	tween.tween_property(self, "global_position", into, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_property(visual, "scale", Vector2.ZERO, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.chain().tween_callback(func() -> void: absorbed.emit())
+
+
+## 坠崖掉出关卡边界：人已出画面，无需动画，稍候广播 fell 由关卡判失败。
+func fall_die() -> void:
+	if _dead:
+		return
+	_dead = true
+	velocity = Vector2.ZERO
+	var tween := create_tween()
+	tween.tween_interval(0.4)
+	tween.tween_callback(func() -> void: fell.emit())
 
 
 func _die() -> void:
