@@ -2,9 +2,9 @@ class_name Rope
 extends Node2D
 ## 引火绳：火形态碰到绳子即「钻进」绳中，火苗载着玩家沿绳快速滑行——
 ## 没有跳跃的游戏里，这是火专属的移动手段（横跨、爬升、斜上高台）。
-## 滑行期间元素量锁定、移动由绳接管（即「期间保持元素状态不变」）；
-## 玩家走过的绳段即刻烧断、触点反方向的剩余段被引燃，统统化作灰烬掉落
-## （单程路径，走过的绳不复存在）；到达另一端玩家沿切向弹出、恢复控制。
+## 滑行期间元素量锁定、移动由绳接管（即「期间保持元素状态不变」）。
+## 只有玩家火前沿经过的绳段会烧断成灰烬掉落（火往前走、绳往前断），
+## 触点反方向的绳段未过火、原样保留；玩家到端弹出后火种把残段回烧成灰。
 ## 途中按 Q 变水会立即脱绳落体。水形态不触发。可任意角度布置。
 ## 整根烧完后绳节点自行移除，仅两端系绳环留在锚点处。
 
@@ -15,8 +15,8 @@ signal ride_finished
 ## 绳两端（本节点局部坐标），可任意角度布置。
 @export var point_a := Vector2(-120, 0)
 @export var point_b := Vector2(120, 0)
-## 绳中点自然下垂量（像素）；斜/垂直绳设 0。
-@export var sag := 10.0
+## 绳中点自然下垂量（像素）；默认绷直，想要垂感再开。
+@export var sag := 0.0
 
 @export_group("滑行")
 ## 触发检测的粗细（沿绳方向胶囊体的直径）。
@@ -70,18 +70,15 @@ func _physics_process(delta: float) -> void:
 		return
 	var inv_len := 1.0 / _length()
 	if _player != null:
-		# 玩家前沿由滑行驱动；另一侧的引燃前沿把身后的绳烧掉
+		# 只有玩家前沿在烧（火往前走、绳往前断）；反方向绳段未过火，原样保留
 		var step := ride_speed * delta * inv_len
-		var trail := trail_burn_speed * delta * inv_len
 		if _rider_dir > 0:
 			_front_b = clampf(_front_b + step, 0.0, 1.0)
-			_front_a = maxf(_front_a - trail, 0.0)
 		else:
 			_front_a = clampf(_front_a - step, 0.0, 1.0)
-			_front_b = minf(_front_b + trail, 1.0)
 		_carry_player()
 	else:
-		# 玩家脱绳后：双前沿把残段烧完
+		# 玩家脱绳后：火种点燃残段（含未过火的反方向段），双前沿烧完
 		var burn := trail_burn_speed * delta * inv_len
 		_front_a = maxf(_front_a - burn, 0.0)
 		_front_b = minf(_front_b + burn, 1.0)
@@ -214,7 +211,8 @@ func _ring_points(outer: float, inner: float, count: int) -> PackedVector2Array:
 func _build_area() -> void:
 	_area = Area2D.new()
 	_area.position = (point_a + point_b) * 0.5
-	_area.rotation = (point_b - point_a).angle()
+	# CapsuleShape2D 长轴在局部 Y，要再转 90° 才沿线段方向躺平
+	_area.rotation = (point_b - point_a).angle() + PI / 2.0
 	var shape := CapsuleShape2D.new()
 	shape.height = _length() + touch_thickness
 	shape.radius = touch_thickness * 0.5
@@ -310,11 +308,12 @@ func _update_flames(delta: float) -> void:
 	while _ash_accum >= 1.0:
 		_ash_accum -= 1.0
 		_spawn_ash(_point_at(_pick_ash_front()) + Vector2(randf_range(-3.0, 3.0), randf_range(-2.0, 3.0)))
-	# 滑行中玩家前沿不画火苗——玩家火苗本体就在那里
+	# 滑行中只画推进中的前沿（玩家前沿，多被玩家火苗盖住作断口提示）；
+	# 停在触点的前沿未过火，不该有火苗
 	var rider_on_a := _player != null and _rider_dir < 0
 	var rider_on_b := _player != null and _rider_dir > 0
-	_flame_a.visible = _front_a > 0.0 and not rider_on_a
-	_flame_b.visible = _front_b < 1.0 and not rider_on_b
+	_flame_a.visible = _front_a > 0.0 and not rider_on_b
+	_flame_b.visible = _front_b < 1.0 and not rider_on_a
 	_flame_a.position = _point_at(maxf(_front_a, 0.0))
 	_flame_b.position = _point_at(minf(_front_b, 1.0))
 	var flicker := 1.0 + 0.18 * sin(_time * 19.0)
@@ -322,8 +321,11 @@ func _update_flames(delta: float) -> void:
 	_flame_b.scale = Vector2(flicker, 2.0 - flicker * 0.6)
 
 
-## 灰从仍在燃烧的前沿掉落（两条前沿都活着就随机挑一条）。
+## 灰从燃烧中的前沿掉落：滑行时只从玩家前沿掉（触点前沿未过火）；
+## 玩家脱绳后残段双前沿都在烧，随机挑一条。
 func _pick_ash_front() -> float:
+	if _player != null:
+		return _front_b if _rider_dir > 0 else _front_a
 	var fronts := []
 	if _front_a > 0.0:
 		fronts.append(_front_a)
