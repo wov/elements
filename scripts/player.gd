@@ -60,6 +60,9 @@ var external_impulse := Vector2.ZERO
 @export var external_friction: float = 500.0
 
 var _transitioning := false
+var _morph_tween: Tween
+var _morph: ElementMorph
+var _water_motion := 0.0
 var _facing: int = 1
 var _dead: bool = false
 var _time: float = 0.0
@@ -85,6 +88,11 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_time += delta
+	if _transitioning and is_instance_valid(_morph) and not _dead and _morph.progress > 0.65:
+		var target := CharacterFrames.FIRE_IDLE if form == Form.FIRE else CharacterFrames.WATER_IDLE
+		_sprite.animation = target
+		_sprite.frame = 0
+		_sprite.modulate.a = smoothstep(0.65, 1.0, _morph.progress)
 	if _dead:
 		# 死亡后的表现完全交给补间动画（缩小 / 被吸走 / 淡出）
 		return
@@ -150,7 +158,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## 切换到另一种形态，并广播 form_changed 信号。
 func switch_form() -> void:
-	if _dead:
+	if _dead or _transitioning:
 		return
 	form = Form.WATER if form == Form.FIRE else Form.FIRE
 	_apply_form(true)
@@ -239,6 +247,9 @@ func _build_visual() -> void:
 	_fx.add_child(_float)
 
 	_sprite = AnimatedSprite2D.new()
+	var body_material := CanvasItemMaterial.new()
+	body_material.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+	_sprite.material = body_material
 	_sprite.sprite_frames = CharacterFrames.build()
 	_sprite.animation_finished.connect(func() -> void:
 		_transitioning = false
@@ -273,12 +284,24 @@ func _apply_form(play_fx: bool) -> void:
 	_light.enabled = form == Form.FIRE
 	if play_fx:
 		_transitioning = true
-		_sprite.play(CharacterFrames.WATER_TO_FIRE if form == Form.FIRE else CharacterFrames.FIRE_TO_WATER)
-		var tween := _new_fx_tween()
-		tween.set_parallel(true)
-		tween.tween_property(_fx, "scale:x", 1.3, 0.08)
-		tween.tween_property(_fx, "scale:y", 0.75, 0.08)
-		tween.chain().tween_property(_fx, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		var before := _sprite.sprite_frames.get_frame_texture(_sprite.animation, _sprite.frame)
+		var target := CharacterFrames.FIRE_IDLE if form == Form.FIRE else CharacterFrames.WATER_IDLE
+		var after := _sprite.sprite_frames.get_frame_texture(target, 0)
+		_sprite.stop()
+		_morph = ElementMorph.new()
+		_morph.configure(before, after, sprite_scale)
+		_float.add_child(_morph)
+		_morph.z_index = 2
+		_morph_tween = create_tween()
+		_morph_tween.set_parallel(true)
+		_morph_tween.tween_property(_morph, "progress", 1.0, 0.85).set_trans(Tween.TRANS_SINE)
+		_morph_tween.tween_property(_sprite, "modulate:a", 0.0, 0.12)
+		_morph_tween.chain().tween_callback(func() -> void:
+			_morph.queue_free()
+			_transitioning = false
+			if not _dead:
+				_sprite.modulate.a = 1.0
+				_update_animation(absf(velocity.x) > 1.0))
 
 
 ## 元素量越低体形越小。
@@ -305,6 +328,11 @@ func _update_animation(moving: bool) -> void:
 ## 火：悬空 + 缓慢起伏；水：贴地 + 轻微张力呼吸。
 func _update_hover(delta: float) -> void:
 	var target := 0.0
+	if not _transitioning:
+		var moving := absf(velocity.x) > 1.0 or rope != null
+		_water_motion = lerpf(_water_motion, 1.0 if moving else 0.0, minf(delta * 9.0, 1.0))
+		var stretch := Vector2(1.0 + _water_motion * 0.07, 1.0 - _water_motion * 0.05) if form == Form.WATER else Vector2.ONE
+		_sprite.scale = stretch * sprite_scale
 	if form == Form.FIRE:
 		target = -10.0 - fire_hover + sin(_time * 2.5) * 2.0
 	else:

@@ -32,10 +32,9 @@ static func build() -> SpriteFrames:
 		frames.remove_animation("default")
 	_add_anim(frames, FIRE_IDLE, 12, 12.0)
 	_add_anim(frames, FIRE_MOVE, 12, 18.0)
-	_add_anim(frames, WATER_IDLE, 4, 6.0)
-	_add_anim(frames, WATER_MOVE, 4, 10.0)
-	_use_art_frames(frames, WATER_IDLE, WATER_IDLE_DIR, WATER_IDLE_COUNT, WATER_IDLE_FPS)
-	_build_water_move(frames)
+	_add_anim(frames, WATER_IDLE, 16, 12.0)
+	_add_anim(frames, WATER_MOVE, 16, 18.0)
+	# 原始水美术保留在 assets/water/idle，可随时调用 _use_art_frames 切回。
 	_build_transition(frames, FIRE_TO_WATER, FIRE_IDLE, WATER_IDLE)
 	_build_transition(frames, WATER_TO_FIRE, WATER_IDLE, FIRE_IDLE)
 	_cached = frames
@@ -76,9 +75,9 @@ static func _add_anim(frames: SpriteFrames, anim: String, count: int, fps: float
 			FIRE_MOVE:
 				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, -0.42 - 0.08 * sin(phase * TAU)))
 			WATER_IDLE:
-				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.0, 0.92))
+				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.0 + 0.018 * sin(phase * TAU), 0.96 - 0.018 * sin(phase * TAU)))
 			WATER_MOVE:
-				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.3, 0.8))
+				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.14 + 0.045 * sin(phase * TAU), 0.86 - 0.025 * sin(phase * TAU)))
 		frames.add_frame(anim, tex)
 
 
@@ -121,10 +120,15 @@ static func _water_pixel(x: float, y: float, phase: float, stretch_x: float, str
 	var tension := 1.0 + 0.05 * sin(3.0 * angle + phase * TAU)
 	if d >= tension:
 		return Color(0, 0, 0, 0)
-	var depth := clampf((tension - d) * 1.6, 0.0, 1.0)
-	var light := clampf(0.6 - (nx + ny) * 0.6, 0.0, 1.0) * depth
-	var color := Color(0.16, 0.42, 0.95, 1.0).lerp(Color(0.80, 0.95, 1.0, 1.0), light)
-	color.a = clampf((tension - d) * 7.0, 0.0, 1.0) * 0.92
+	var edge := clampf((tension - d) * 18.0, 0.0, 1.0)
+	var rim := pow(clampf(d / tension, 0.0, 1.0), 5.0)
+	var flow := sin(ny * 15.0 + phase * TAU + sin(nx * 6.0 - phase * TAU)) * 0.5 + 0.5
+	var color := Color(0.055, 0.32, 0.72).lerp(Color(0.12, 0.68, 0.9), clampf(0.55 - ny * 0.3 + flow * 0.16, 0.0, 1.0))
+	color = color.lerp(Color(0.45, 0.9, 1.0), rim * 0.65)
+	var highlight := exp(-((nx + 0.35) * (nx + 0.35) / 0.04 + (ny + 0.42) * (ny + 0.42) / 0.015))
+	var small_glint := exp(-((nx + 0.56) * (nx + 0.56) / 0.007 + (ny + 0.14) * (ny + 0.14) / 0.018))
+	color = color.lerp(Color(0.94, 1.0, 1.0), clampf(highlight + small_glint * 0.7, 0.0, 1.0))
+	color.a = edge * (0.82 + rim * 0.16)
 	return color
 
 
