@@ -312,7 +312,7 @@ func _update_size() -> void:
 
 ## 形态 + 是否移动 → 动画帧；向左移动用 flip_h 镜像。
 func _update_animation(moving: bool) -> void:
-	_sprite.flip_h = form == Form.WATER and _facing < 0
+	_sprite.flip_h = _facing < 0
 	if _transitioning:
 		return
 	var anim: String
@@ -322,7 +322,7 @@ func _update_animation(moving: bool) -> void:
 		anim = CharacterFrames.WATER_MOVE if moving else CharacterFrames.WATER_IDLE
 	if _sprite.animation != anim or not _sprite.is_playing():
 		_sprite.play(anim)
-	_sprite.flip_h = form == Form.WATER and _facing < 0
+	_sprite.flip_h = _facing < 0
 
 
 ## 火：悬空 + 缓慢起伏；水：贴地 + 轻微张力呼吸。

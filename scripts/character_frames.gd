@@ -71,9 +71,9 @@ static func _add_anim(frames: SpriteFrames, anim: String, count: int, fps: float
 		var tex: Texture2D = null
 		match anim:
 			FIRE_IDLE:
-				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, 0.0))
+				tex = _fire_texture(phase, 0.0)
 			FIRE_MOVE:
-				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, 0.0))
+				tex = _fire_texture(phase, -12.0)
 			WATER_IDLE:
 				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.0 + 0.018 * sin(phase * TAU), 0.96 - 0.018 * sin(phase * TAU)))
 			WATER_MOVE:
@@ -89,31 +89,46 @@ static func _texture(draw: Callable) -> Texture2D:
 	return ImageTexture.create_from_image(image)
 
 
-## 多焰舌火焰：位置固定，焰舌只沿竖直方向升降，内层暖黄、外层橙红。
-static func _fire_pixel(x: float, y: float, phase: float, _lean: float) -> Color:
-	var nx := (x - 32.0) / 24.0
-	var height := (56.0 - y) / 48.0
-	if height < 0.0 or absf(nx) >= 1.0:
-		return Color.TRANSPARENT
-	var envelope := sqrt(maxf(0.0, 1.0 - nx * nx))
-	var crown := 0.32 * envelope
-	# 各焰舌独立竖直翻动，没有左右漂移或迎风倾斜。
-	for i in 5:
-		var center := -0.68 + float(i) * 0.34
-		var rise := 0.38 + 0.15 * sin(phase * TAU + float(i) * 1.7)
-		if i == 2:
-			rise += 0.22
-		crown += rise * exp(-pow((nx - center) / 0.17, 2.0))
-	var edge := clampf((crown - height) * 30.0, 0.0, 1.0)
-	var base := clampf(height * 40.0, 0.0, 1.0)
-	if edge <= 0.0:
-		return Color.TRANSPARENT
-	var inner := clampf((crown * 0.73 - height) * 9.0, 0.0, 1.0) * (1.0 - absf(nx) * 0.65)
-	var flow := 0.5 + 0.5 * sin(height * 19.0 - phase * TAU * 2.0 + absf(nx) * 7.0)
-	var color := Color(1.0, 0.19, 0.035).lerp(Color(1.0, 0.66, 0.08), inner)
-	color = color.lerp(Color(1.0, 0.94, 0.57), pow(inner, 3.0) * (0.7 + flow * 0.3))
-	color.a = edge * base
-	return color
+## 圆底、弯曲主焰尖与侧焰，分层轮廓接近 🔥；移动时上半部向身后拖曳。
+static func _fire_texture(phase: float, wind: float) -> Texture2D:
+	var outer := _flame_outline(phase, wind, false)
+	var inner := _flame_outline(phase, wind, true)
+	var image := Image.create_empty(FRAME_SIZE, FRAME_SIZE, false, Image.FORMAT_RGBA8)
+	for y in FRAME_SIZE:
+		for x in FRAME_SIZE:
+			var point := Vector2(float(x) * 64.0 / FRAME_SIZE, float(y) * 64.0 / FRAME_SIZE)
+			if not Geometry2D.is_point_in_polygon(point, outer):
+				continue
+			var warmth := clampf((point.y - 8.0) / 50.0, 0.0, 1.0)
+			var color := Color(1.0, 0.25, 0.035).lerp(Color(1.0, 0.60, 0.045), warmth)
+			if Geometry2D.is_point_in_polygon(point, inner):
+				color = Color(1.0, 0.77, 0.12).lerp(Color(1.0, 0.96, 0.61), warmth)
+			image.set_pixel(x, y, color)
+	return ImageTexture.create_from_image(image)
+
+
+static func _flame_outline(phase: float, wind: float, core: bool) -> PackedVector2Array:
+	# 三次曲线连续连接：圆底 → 右侧焰舌 → 弯曲长火尖 → 左侧焰舌 → 圆底。
+	var curves := [
+		[Vector2(32,58), Vector2(51,58), Vector2(55,42), Vector2(47,29)],
+		[Vector2(47,29), Vector2(47,37), Vector2(42,36), Vector2(41,30)],
+		[Vector2(41,30), Vector2(44,19), Vector2(38,14), Vector2(35,5)],
+		[Vector2(35,5), Vector2(37,20), Vector2(22,20), Vector2(26,35)],
+		[Vector2(26,35), Vector2(22,37), Vector2(18,30), Vector2(19,23)],
+		[Vector2(19,23), Vector2(13,33), Vector2(11,42), Vector2(16,49)],
+		[Vector2(16,49), Vector2(19,55), Vector2(25,58), Vector2(32,58)],
+	]
+	var points := PackedVector2Array()
+	for curve in curves:
+		for i in 12:
+			var p: Vector2 = curve[0].bezier_interpolate(curve[1], curve[2], curve[3], float(i) / 12.0)
+			if core:
+				p = Vector2(32,56) + (p - Vector2(32,58)) * Vector2(0.53,0.65)
+			var height := clampf((58.0 - p.y) / 53.0, 0.0, 1.0)
+			p.y += sin(phase * TAU + height * 4.0) * 1.4 * height
+			p.x += (wind + sin(phase * TAU + height * 5.0) * 1.8) * pow(height, 1.7)
+			points.append(p)
+	return points
 
 
 ## 水滴像素：圆形 + 表面张力式的小幅半径波动（帧相位制造抖动）。
