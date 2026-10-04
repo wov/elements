@@ -8,7 +8,10 @@ extends RefCounted
 ## - water_idle：水滴待机 —— 正式美术 8 帧（assets/water/idle/）
 ## - water_move：有张力的圆形水滴（占位）；移动时横向拉伸
 
-const FRAME_SIZE := 64
+const FRAME_SIZE := 128
+const FIRE_TO_WATER := "fire_to_water"
+const WATER_TO_FIRE := "water_to_fire"
+static var _cached: SpriteFrames
 
 const FIRE_IDLE := "fire_idle"
 const FIRE_MOVE := "fire_move"
@@ -22,14 +25,20 @@ const WATER_IDLE_FPS := 8.0
 
 
 static func build() -> SpriteFrames:
+	if _cached != null:
+		return _cached
 	var frames := SpriteFrames.new()
 	if frames.has_animation("default"):
 		frames.remove_animation("default")
-	_add_anim(frames, FIRE_IDLE, 6, 10.0)
-	_add_anim(frames, FIRE_MOVE, 6, 14.0)
+	_add_anim(frames, FIRE_IDLE, 12, 12.0)
+	_add_anim(frames, FIRE_MOVE, 12, 18.0)
 	_add_anim(frames, WATER_IDLE, 4, 6.0)
 	_add_anim(frames, WATER_MOVE, 4, 10.0)
 	_use_art_frames(frames, WATER_IDLE, WATER_IDLE_DIR, WATER_IDLE_COUNT, WATER_IDLE_FPS)
+	_build_water_move(frames)
+	_build_transition(frames, FIRE_TO_WATER, FIRE_IDLE, WATER_IDLE)
+	_build_transition(frames, WATER_TO_FIRE, WATER_IDLE, FIRE_IDLE)
+	_cached = frames
 	return frames
 
 
@@ -47,7 +56,10 @@ static func _use_art_frames(frames: SpriteFrames, anim: String, dir_path: String
 	frames.set_animation_loop(anim, true)
 	for i in count:
 		var image := (load(dir_path + str(i + 1) + ".png") as Texture2D).get_image()
-		image.resize(FRAME_SIZE, FRAME_SIZE, Image.INTERPOLATE_LANCZOS)
+		image.resize(FRAME_SIZE, int(round(float(image.get_height()) * FRAME_SIZE / image.get_width())), Image.INTERPOLATE_LANCZOS)
+		var canvas := Image.create_empty(FRAME_SIZE, FRAME_SIZE, false, Image.FORMAT_RGBA8)
+		canvas.blit_rect(image, Rect2i(Vector2i.ZERO, image.get_size()), Vector2i(0, FRAME_SIZE - image.get_height()))
+		image = canvas
 		frames.add_frame(anim, ImageTexture.create_from_image(image))
 
 
@@ -60,13 +72,13 @@ static func _add_anim(frames: SpriteFrames, anim: String, count: int, fps: float
 		var tex: Texture2D = null
 		match anim:
 			FIRE_IDLE:
-				tex = _texture(func(x: int, y: int) -> Color: return _fire_pixel(x, y, phase, 0.0))
+				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, 0.0))
 			FIRE_MOVE:
-				tex = _texture(func(x: int, y: int) -> Color: return _fire_pixel(x, y, phase, -0.42))
+				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, -0.42 - 0.08 * sin(phase * TAU)))
 			WATER_IDLE:
-				tex = _texture(func(x: int, y: int) -> Color: return _water_pixel(x, y, phase, 1.0, 0.92))
+				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.0, 0.92))
 			WATER_MOVE:
-				tex = _texture(func(x: int, y: int) -> Color: return _water_pixel(x, y, phase, 1.3, 0.8))
+				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.3, 0.8))
 		frames.add_frame(anim, tex)
 
 
@@ -74,19 +86,19 @@ static func _texture(draw: Callable) -> Texture2D:
 	var image := Image.create_empty(FRAME_SIZE, FRAME_SIZE, false, Image.FORMAT_RGBA8)
 	for y in FRAME_SIZE:
 		for x in FRAME_SIZE:
-			image.set_pixel(x, y, draw.call(x, y))
+			image.set_pixel(x, y, draw.call(float(x) * 64.0 / FRAME_SIZE, float(y) * 64.0 / FRAME_SIZE))
 	return ImageTexture.create_from_image(image)
 
 
 ## 火焰像素：底部宽、顶部收尖；中轴随高度摆动（帧相位制造跳动）。
 ## lean 为移动时的迎风拖曳量（负值 = 火苗向左拖曳，配 flip_h 使用）。
-static func _fire_pixel(x: int, y: int, phase: float, lean: float) -> Color:
+static func _fire_pixel(x: float, y: float, phase: float, lean: float) -> Color:
 	var nx := (float(x) + 0.5 - 32.0) / 28.0
 	var t := 1.0 - (float(y) + 0.5) / 56.0
 	if t < 0.0 or t > 1.0:
 		return Color(0, 0, 0, 0)
 	var axis := sin(t * 5.5 + phase * TAU) * 0.14 * t + lean * pow(t, 1.5)
-	var half_width := 0.62 * sqrt(maxf(0.0, 1.0 - t * t)) + 0.05
+	var half_width := (0.62 + 0.035 * sin(phase * TAU)) * sqrt(maxf(0.0, 1.0 - t * t)) + 0.05
 	if absf(lean) > 0.0:
 		half_width *= 0.88
 	var d := absf(nx - axis) / half_width
@@ -101,7 +113,7 @@ static func _fire_pixel(x: int, y: int, phase: float, lean: float) -> Color:
 
 ## 水滴像素：圆形 + 表面张力式的小幅半径波动（帧相位制造抖动）。
 ## stretch_x / stretch_y 控制移动时的拉伸。
-static func _water_pixel(x: int, y: int, phase: float, stretch_x: float, stretch_y: float) -> Color:
+static func _water_pixel(x: float, y: float, phase: float, stretch_x: float, stretch_y: float) -> Color:
 	var nx := (float(x) + 0.5 - 32.0) / 22.0
 	var ny := (float(y) + 0.5 - 32.0) / 22.0
 	var angle := atan2(ny, nx)
@@ -114,3 +126,45 @@ static func _water_pixel(x: int, y: int, phase: float, stretch_x: float, stretch
 	var color := Color(0.16, 0.42, 0.95, 1.0).lerp(Color(0.80, 0.95, 1.0, 1.0), light)
 	color.a = clampf((tension - d) * 7.0, 0.0, 1.0) * 0.92
 	return color
+
+
+## 移动沿用水待机美术，以周期拉伸、压缩表现表面张力。
+static func _build_water_move(frames: SpriteFrames) -> void:
+	frames.remove_animation(WATER_MOVE)
+	frames.add_animation(WATER_MOVE)
+	frames.set_animation_speed(WATER_MOVE, 12.0)
+	for i in WATER_IDLE_COUNT:
+		var source := frames.get_frame_texture(WATER_IDLE, i % frames.get_frame_count(WATER_IDLE)).get_image()
+		var pulse := sin(float(i) / WATER_IDLE_COUNT * TAU)
+		var result := Image.create_empty(FRAME_SIZE, FRAME_SIZE, false, Image.FORMAT_RGBA8)
+		var sx := 1.08 + 0.05 * pulse
+		var sy := 0.88 - 0.04 * pulse
+		for y in FRAME_SIZE:
+			for x in FRAME_SIZE:
+				var px := int((x - FRAME_SIZE * 0.5) / sx + FRAME_SIZE * 0.5)
+				var py := int((y - FRAME_SIZE * 0.78) / sy + FRAME_SIZE * 0.78)
+				if px >= 0 and px < FRAME_SIZE and py >= 0 and py < FRAME_SIZE:
+					result.set_pixel(x, y, source.get_pixel(px, py))
+		frames.add_frame(WATER_MOVE, ImageTexture.create_from_image(result))
+
+
+## 非循环转换动画：旧形态收束，颜色与轮廓平滑过渡到新形态。
+static func _build_transition(frames: SpriteFrames, anim: String, before: String, after: String) -> void:
+	frames.add_animation(anim)
+	frames.set_animation_loop(anim, false)
+	frames.set_animation_speed(anim, 24.0)
+	var a := frames.get_frame_texture(before, 0).get_image()
+	var b := frames.get_frame_texture(after, 0).get_image()
+	for i in 12:
+		var t := smoothstep(0.0, 1.0, float(i) / 11.0)
+		var image := Image.create_empty(FRAME_SIZE, FRAME_SIZE, false, Image.FORMAT_RGBA8)
+		for y in FRAME_SIZE:
+			for x in FRAME_SIZE:
+				var ca := a.get_pixel(x, y)
+				var cb := b.get_pixel(x, y)
+				var alpha := lerpf(ca.a, cb.a, t)
+				var rgb := Vector3(ca.r, ca.g, ca.b) * ca.a * (1.0 - t) + Vector3(cb.r, cb.g, cb.b) * cb.a * t
+				if alpha > 0.001:
+					rgb /= alpha
+				image.set_pixel(x, y, Color(rgb.x, rgb.y, rgb.z, alpha))
+		frames.add_frame(anim, ImageTexture.create_from_image(image))

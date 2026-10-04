@@ -43,7 +43,7 @@ enum Form { FIRE, WATER }
 ## 水渍生成间隔（秒）
 @export var stain_interval: float = 0.12
 ## 占位帧的显示缩放
-@export var sprite_scale: float = 0.6
+@export var sprite_scale: float = 0.65
 
 var form: Form = Form.FIRE
 ## 当前元素量（0~1）。归零即消散并发出 depleted 信号。
@@ -59,6 +59,7 @@ var external_impulse := Vector2.ZERO
 ## 外力惯性的每秒衰减量（像素/秒²）。
 @export var external_friction: float = 500.0
 
+var _transitioning := false
 var _facing: int = 1
 var _dead: bool = false
 var _time: float = 0.0
@@ -239,17 +240,21 @@ func _build_visual() -> void:
 
 	_sprite = AnimatedSprite2D.new()
 	_sprite.sprite_frames = CharacterFrames.build()
+	_sprite.animation_finished.connect(func() -> void:
+		_transitioning = false
+		if not _dead:
+			_update_animation(absf(velocity.x) > 1.0))
 	_sprite.scale = Vector2(sprite_scale, sprite_scale)
 	_sprite.play(CharacterFrames.FIRE_IDLE)
 	_float.add_child(_sprite)
 
 	_percent_label = Label.new()
 	UiFont.apply(_percent_label)
-	_percent_label.position = Vector2(-24, -12)
-	_percent_label.custom_minimum_size = Vector2(48, 24)
+	_percent_label.position = Vector2(-36, -8)
+	_percent_label.custom_minimum_size = Vector2(72, 30)
 	_percent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_percent_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_percent_label.add_theme_font_size_override("font_size", 18)
+	_percent_label.add_theme_font_size_override("font_size", 24)
 	_percent_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
 	_percent_label.add_theme_color_override("font_outline_color", Color(0.08, 0.09, 0.14, 0.9))
 	_percent_label.add_theme_constant_override("outline_size", 6)
@@ -267,6 +272,8 @@ func _build_visual() -> void:
 func _apply_form(play_fx: bool) -> void:
 	_light.enabled = form == Form.FIRE
 	if play_fx:
+		_transitioning = true
+		_sprite.play(CharacterFrames.WATER_TO_FIRE if form == Form.FIRE else CharacterFrames.FIRE_TO_WATER)
 		var tween := _new_fx_tween()
 		tween.set_parallel(true)
 		tween.tween_property(_fx, "scale:x", 1.3, 0.08)
@@ -282,6 +289,9 @@ func _update_size() -> void:
 
 ## 形态 + 是否移动 → 动画帧；向左移动用 flip_h 镜像。
 func _update_animation(moving: bool) -> void:
+	_sprite.flip_h = _facing < 0
+	if _transitioning:
+		return
 	var anim: String
 	if form == Form.FIRE:
 		anim = CharacterFrames.FIRE_MOVE if moving else CharacterFrames.FIRE_IDLE
@@ -296,9 +306,9 @@ func _update_animation(moving: bool) -> void:
 func _update_hover(delta: float) -> void:
 	var target := 0.0
 	if form == Form.FIRE:
-		target = -fire_hover + sin(_time * 2.5) * 3.0
+		target = -10.0 - fire_hover + sin(_time * 2.5) * 2.0
 	else:
-		target = 8.0 + sin(_time * 1.8) * 1.2
+		target = -10.0 + sin(_time * 1.8) * 0.6
 	_float.position.y = lerpf(_float.position.y, target, 12.0 * delta)
 
 
