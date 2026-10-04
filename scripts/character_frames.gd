@@ -4,7 +4,7 @@ extends RefCounted
 ## 没有正式美术的动画用程序生成的占位帧；有正式美术的用 _use_art_frames 替换。
 ##
 ## 动画一览（均按「向右移动」绘制，向左由 flip_h 镜像）：
-## - fire_idle / fire_move：火焰（占位）；移动时火苗向行进反方向拖曳（迎风变形）并略微收窄
+## - fire_idle / fire_move：火焰（占位）；多焰舌向上翻动，待机与移动均直立
 ## - water_idle：水滴待机 —— 正式美术 8 帧（assets/water/idle/）
 ## - water_move：有张力的圆形水滴（占位）；移动时横向拉伸
 
@@ -73,7 +73,7 @@ static func _add_anim(frames: SpriteFrames, anim: String, count: int, fps: float
 			FIRE_IDLE:
 				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, 0.0))
 			FIRE_MOVE:
-				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, -0.42 - 0.08 * sin(phase * TAU)))
+				tex = _texture(func(x: float, y: float) -> Color: return _fire_pixel(x, y, phase, 0.0))
 			WATER_IDLE:
 				tex = _texture(func(x: float, y: float) -> Color: return _water_pixel(x, y, phase, 1.0 + 0.018 * sin(phase * TAU), 0.96 - 0.018 * sin(phase * TAU)))
 			WATER_MOVE:
@@ -89,24 +89,30 @@ static func _texture(draw: Callable) -> Texture2D:
 	return ImageTexture.create_from_image(image)
 
 
-## 火焰像素：底部宽、顶部收尖；中轴随高度摆动（帧相位制造跳动）。
-## lean 为移动时的迎风拖曳量（负值 = 火苗向左拖曳，配 flip_h 使用）。
-static func _fire_pixel(x: float, y: float, phase: float, lean: float) -> Color:
-	var nx := (float(x) + 0.5 - 32.0) / 28.0
-	var t := 1.0 - (float(y) + 0.5) / 56.0
-	if t < 0.0 or t > 1.0:
-		return Color(0, 0, 0, 0)
-	var axis := sin(t * 5.5 + phase * TAU) * 0.14 * t + lean * pow(t, 1.5)
-	var half_width := (0.62 + 0.035 * sin(phase * TAU)) * sqrt(maxf(0.0, 1.0 - t * t)) + 0.05
-	if absf(lean) > 0.0:
-		half_width *= 0.88
-	var d := absf(nx - axis) / half_width
-	if d >= 1.0:
-		return Color(0, 0, 0, 0)
-	var alpha := clampf((1.0 - d) * 2.2, 0.0, 1.0)
-	var heat := clampf((1.0 - d * 0.55) * (1.15 - t * 0.85) + 0.08 * sin(phase * TAU), 0.0, 1.0)
-	var color := Color(1.0, 0.25 + 0.6 * heat, 0.08 + 0.35 * heat)
-	color.a = alpha
+## 多焰舌火焰：位置固定，焰舌只沿竖直方向升降，内层暖黄、外层橙红。
+static func _fire_pixel(x: float, y: float, phase: float, _lean: float) -> Color:
+	var nx := (x - 32.0) / 24.0
+	var height := (56.0 - y) / 48.0
+	if height < 0.0 or absf(nx) >= 1.0:
+		return Color.TRANSPARENT
+	var envelope := sqrt(maxf(0.0, 1.0 - nx * nx))
+	var crown := 0.32 * envelope
+	# 各焰舌独立竖直翻动，没有左右漂移或迎风倾斜。
+	for i in 5:
+		var center := -0.68 + float(i) * 0.34
+		var rise := 0.38 + 0.15 * sin(phase * TAU + float(i) * 1.7)
+		if i == 2:
+			rise += 0.22
+		crown += rise * exp(-pow((nx - center) / 0.17, 2.0))
+	var edge := clampf((crown - height) * 30.0, 0.0, 1.0)
+	var base := clampf(height * 40.0, 0.0, 1.0)
+	if edge <= 0.0:
+		return Color.TRANSPARENT
+	var inner := clampf((crown * 0.73 - height) * 9.0, 0.0, 1.0) * (1.0 - absf(nx) * 0.65)
+	var flow := 0.5 + 0.5 * sin(height * 19.0 - phase * TAU * 2.0 + absf(nx) * 7.0)
+	var color := Color(1.0, 0.19, 0.035).lerp(Color(1.0, 0.66, 0.08), inner)
+	color = color.lerp(Color(1.0, 0.94, 0.57), pow(inner, 3.0) * (0.7 + flow * 0.3))
+	color.a = edge * base
 	return color
 
 
