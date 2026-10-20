@@ -12,14 +12,18 @@ config_version=5
 
 config/name="Elements"
 config/description="2D 元素解谜平台游戏：主角可在火 / 水基础形态间切换。"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/mobile/descent.tscn"
 config/features=PackedStringArray("4.7")
 config/icon="res://icon.svg"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=420
+window/size/viewport_height=860
+window/size/window_width_override=420
+window/size/window_height_override=860
+window/stretch/mode="canvas_items"
+window/handheld/orientation=1
 
 [input]
 
@@ -45,3 +49,8 @@ switch_form={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":81,"key_label":0,"unicode":113,"location":0,"echo":false,"script":null)
 ]
 }
+
+[input_devices]
+
+pointing/emulate_mouse_from_touch=false
+pointing/emulate_touch_from_mouse=false
