@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Elements"
 config/description="2D 元素解谜平台游戏：主角可在火 / 水基础形态间切换。"
-run/main_scene="res://scenes/mobile/descent.tscn"
+run/main_scene="res://scenes/mobile/escape.tscn"
 config/features=PackedStringArray("4.7")
 config/icon="res://icon.svg"
 
@@ -53,4 +53,3 @@ switch_form={
 [input_devices]
 
 pointing/emulate_mouse_from_touch=false
-pointing/emulate_touch_from_mouse=false

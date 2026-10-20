@@ -24,6 +24,7 @@ var sparks: Array[Dictionary] = []
 var next_stage := 0
 var rider := -1
 var rope_t := 0.0
+@export var rail_speed := 330.0
 var pointer := -1
 var press_at := Vector2.ZERO
 var last_at := Vector2.ZERO
@@ -116,7 +117,7 @@ func _physics_process(delta: float) -> void:
 	var axis := Input.get_axis("move_left", "move_right")
 	if rider >= 0:
 		var rope: Dictionary = objects[rider]
-		rope_t = minf(1.0, rope_t + delta * 330.0 / rope.a.distance_to(rope.b))
+		rope_t = minf(1.0, rope_t + delta * rail_speed / rope.a.distance_to(rope.b))
 		position_world = rope.a.lerp(rope.b, rope_t)
 		rope.burn = rope_t
 		if rope_t >= 1.0:
